@@ -24,6 +24,62 @@ from sklearn.linear_model import LinearRegression
 FINGPT_API_KEY = "AIzaTRDjNFU6WAx6FJ74zhm2vQqWyD5MsYKUcOk"  # Replace with actual key
 NEWS_API_KEY = "3f8e6bb1fb72490b835c800afcadd1aa"      # Replace with actual key
 
+def fetch_stock_data(ticker, period='1y'):
+    data = yf.download(ticker, period=period)
+    if data.empty:
+        dates = pd.date_range(end=datetime.today(), periods=100)
+        data = pd.DataFrame({
+            'Close': np.random.normal(100, 10, 100).cumsum(),
+            'Volume': np.random.randint(100000, 1000000, 100),
+            'Open': np.random.normal(100, 10, 100),
+            'High': np.random.normal(105, 10, 100),
+            'Low': np.random.normal(95, 10, 100)
+        }, index=dates)
+    return data
+
+# ======================
+# PREDICTION MODELS
+# ======================
+def train_holt_winters(data, seasonal_periods=5, damped=True):
+    model = ExponentialSmoothing(
+        data['Close'],
+        trend='add',
+        seasonal='add',
+        seasonal_periods=seasonal_periods,
+        damped_trend=damped
+    ).fit()
+    return model
+
+def predict_holt_winters(model, periods=30):
+    return model.forecast(periods).values
+
+def train_prophet_model(data):
+    df = data.reset_index()[['Date', 'Close']].rename(columns={'Date': 'ds', 'Close': 'y'})
+    model = Prophet(daily_seasonality=False)
+    model.fit(df)
+    return model
+
+def train_lstm_model(data, lookback=60):
+    scaler = MinMaxScaler()
+    scaled_data = scaler.fit_transform(data[['Close']])
+    
+    X, y = [], []
+    for i in range(lookback, len(scaled_data)):
+        X.append(scaled_data[i-lookback:i, 0])
+        y.append(scaled_data[i, 0])
+    
+    X, y = np.array(X), np.array(y)
+    X = np.reshape(X, (X.shape[0], X.shape[1], 1))
+    
+    model = Sequential()
+    model.add(LSTM(50, return_sequences=True, input_shape=(X.shape[1], 1)))
+    model.add(LSTM(50))
+    model.add(Dense(1))
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    model.fit(X, y, epochs=1, batch_size=1, verbose=0)
+    return model, scaler
+def train_
+
 # Enhanced FinGPTChat Class with Visualization
 class FinGPTChat:
     def __init__(self, section_name, context="", visual_data=None):
@@ -592,7 +648,7 @@ def main():
             )
             seasonal_periods = 5 if "Weekly" in seasonality_type else (21 if "Monthly" in seasonality_type else 63)
     
-        if st.button("Submit"):
+        if st.button("Generate Predictions"):
             stock_data = fetch_stock_data(stock_ticker)
             if not stock_data.empty:
                 try:
