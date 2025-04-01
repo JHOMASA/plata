@@ -78,7 +78,7 @@ def train_lstm_model(data, lookback=60):
     model.compile(optimizer='adam', loss='mean_squared_error')
     model.fit(X, y, epochs=1, batch_size=1, verbose=0)
     return model, scaler
-def train_
+
 
 # Enhanced FinGPTChat Class with Visualization
 class FinGPTChat:
