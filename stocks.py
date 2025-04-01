@@ -742,4 +742,5 @@ def main():
                     st.error(f"Error in {model_type} predictions: {str(e)}")
                     st.exception(e) if st.checkbox("Show technical details") else None
 
-    app.run_server(debug=True)
+    if __name__ == "__main__":
+            main()
