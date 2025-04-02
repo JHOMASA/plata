@@ -25,14 +25,15 @@ FINGPT_API_KEY = "AIzaTRDjNFU6WAx6FJ74zhm2vQqWyD5MsYKUcOk"  # Replace with actua
 NEWS_API_KEY = "3f8e6bb1fb72490b835c800afcadd1aa"      # Replace with actual key
 
 
-def fetch_stock_data(symbol):
+def fetch_stock_data(symbol, period="1y"):
     try:
         stock = yf.Ticker(symbol)
-        stock_data = stock.history(period="1y")
+        stock_data = stock.history(period=period)
+        if stock_data.empty:
+            raise ValueError("No data found for this ticker.")
         return stock_data
     except Exception as e:
-        st.error(f"Error fetching stock data: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(), f"Error fetching stock data: {e}"
 
 # Enhanced visualization for all sections
 def display_stock_analysis(stock_data, ticker):
@@ -254,10 +255,10 @@ def main():
     )
     
     # Fetch Data
-    data = fetch_stock_data(ticker, period)
+    data,error = fetch_stock_data(ticker, period)
     
     if data.empty:
-        st.error("Could not fetch data for this ticker")
+        st.error("Could not fetch {error} data for this ticker")
         return
     
     # Analysis Sections
@@ -301,8 +302,12 @@ def main():
         if st.button("Generate Predictions"):
             with st.spinner(f"Training {model_type} model..."):
                 if model_type == "Holt-Winters":
-                    model = train_holt_winters(data, seasonal_periods)
-                    predictions = predict_holt_winters(model)
+                    model, error = train_holt_winters(data, seasonal_periods)
+                    if model is None:
+                        st.error(error)
+                    else:
+                        predictions = predict_holt_winters(30)
+                        display_predictions(data, predictions, "Holt-Winters")
                 elif model_type == "Prophet":
                     model = train_prophet_model(data)
                     predictions = predict_prophet(model)
