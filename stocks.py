@@ -24,6 +24,16 @@ from sklearn.linear_model import LinearRegression
 FINGPT_API_KEY = "AIzaTRDjNFU6WAx6FJ74zhm2vQqWyD5MsYKUcOk"  # Replace with actual key
 NEWS_API_KEY = "3f8e6bb1fb72490b835c800afcadd1aa"      # Replace with actual key
 
+
+def fetch_stock_data(symbol):
+    try:
+        stock = yf.Ticker(symbol)
+        stock_data = stock.history(period="1y")
+        return stock_data
+    except Exception as e:
+        st.error(f"Error fetching stock data: {e}")
+        return pd.DataFrame()
+
 # Enhanced visualization for all sections
 def display_stock_analysis(stock_data, ticker):
     col1, col2 = st.columns(2)
