@@ -23,40 +23,87 @@ import time
 import random
 from sklearn.metrics import mean_absolute_error
 from functools import lru_cache
-
-
+import requests
+from typing import Tuple
 
 
 # Configuration
+
+FMP_API_KEY = "7ZQp6gRCjJ1vucRutlFeRlpWjzh5GMhu"
 FINGPT_API_KEY = "AIzaTRDjNFU6WAx6FJ74zhm2vQqWyD5MsYKUcOk"  # Replace with actual key
 NEWS_API_KEY = "3f8e6bb1fb72490b835c800afcadd1aa"      # Replace with actual key
 
 
 @lru_cache(maxsize=32)
-def fetch_stock_data_cached(symbol: str, period: str = "1y"):
-    """Fetch stock data with caching. Returns a tuple of (success, data_or_error)"""
+def fetch_stock_data_fmp(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
+    """Fetch stock data from Financial Modeling Prep API"""
     try:
-        # Add delay to prevent rate limiting
-        time.sleep(random.uniform(1, 2))
+        # Map period to FMP's available timeframes
+        period_map = {
+            "1mo": "1month",
+            "3mo": "3month",
+            "6mo": "6month",
+            "1y": "1year",
+            "2y": "2year",
+            "5y": "5year"
+        }
         
-        stock = yf.Ticker(symbol)
-        stock_data = stock.history(period=period)
-        if stock_data.empty:
-            return False, "No data found for this ticker"
+        timeframe = period_map.get(period, "1year")
         
-        # Convert DataFrame to JSON-serializable format for caching
-        return True, stock_data.to_json(date_format='iso')
+        # Fetch daily prices
+        url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}?apikey={FMP_API_KEY}"
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        
+        if 'historical' not in data:
+            return pd.DataFrame(), "No data found for this ticker"
+        
+        df = pd.DataFrame(data['historical'])
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index('date', inplace=True)
+        
+        # Filter based on selected period
+        end_date = df.index.max()
+        if period == "1mo":
+            start_date = end_date - pd.DateOffset(months=1)
+        elif period == "3mo":
+            start_date = end_date - pd.DateOffset(months=3)
+        elif period == "6mo":
+            start_date = end_date - pd.DateOffset(months=6)
+        elif period == "1y":
+            start_date = end_date - pd.DateOffset(years=1)
+        elif period == "2y":
+            start_date = end_date - pd.DateOffset(years=2)
+        elif period == "5y":
+            start_date = end_date - pd.DateOffset(years=5)
+            
+        df = df.loc[start_date:end_date]
+        
+        # Rename columns to match Yahoo Finance format
+        df = df.rename(columns={
+            'open': 'Open',
+            'high': 'High',
+            'low': 'Low',
+            'close': 'Close',
+            'volume': 'Volume',
+            'adjClose': 'Adj Close'
+        })
+        
+        return df, None
+        
     except Exception as e:
-        return False, f"Error fetching stock data: {e}"
-def get_stock_data(symbol: str, period: str = "1y"):
-    """Wrapper that handles the cached data conversion"""
-    success, result = fetch_stock_data_cached(symbol, period)
-    
-    if success:
-        # Convert JSON back to DataFrame
-        return pd.read_json(result), None
-    else:
-        return pd.DataFrame(), result
+        return pd.DataFrame(), f"Error fetching stock data: {e}"
+@lru_cache(maxsize=32)
+def fetch_stock_data_cached(symbol: str, period: str = "1y") -> Tuple[bool, str]:
+    """Fetch stock data with caching using FMP API"""
+    try:
+        df, error = fetch_stock_data_fmp(symbol, period)
+        if error:
+            return False, error
+        return True, df.to_json(date_format='iso')
+    except Exception as e:
+        return False, f"Error: {str(e)}"
 
 # Enhanced visualization for all sections
 def display_stock_analysis(stock_data, ticker):
@@ -282,20 +329,17 @@ def main():
     )
     
     # Fetch Data
-    data,error = get_stock_data(ticker, period)
+    data, error = get_stock_data(ticker, period)
     
     if data.empty:
-       if "Rate limited" in error:
-          st.error("""
-          ⚠️ Yahoo Finance rate limit reached. 
-          Please wait a few minutes and try again, or:
-          - Use the cached version if available
-          - Try again later
-          """)
-          st.stop()  # Prevents the app from trying to continue
-       else:
-           st.error(f"Error fetching data: {error}")
-       return
+        if "rate limit" in error.lower():
+            st.error("""
+            ⚠️ API rate limit reached. 
+            Please wait a few minutes and try again.
+            """)
+        else:
+            st.error(f"Error fetching data: {error}")
+        st.stop()
     
     # Analysis Sections
     if analysis_type == "Stock Analysis":
