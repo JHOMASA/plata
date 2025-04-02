@@ -562,16 +562,17 @@ def display_predictions(historical_data, predictions, model_name):
 
 # Updated main app structure
 def main():
+    # All main() content indented 4 spaces
     st.sidebar.header("Navigation")
     analysis_type = st.sidebar.radio(
         "Select Analysis Type",
         ["Stock Analysis", "Monte Carlo", "Financial Ratios", "Predictions"]
-     )
+    )
     
-     # Ticker Input
-     
-     ticker = st.sidebar.text_input("Enter Stock Ticker", "AAPL").strip().upper()
-     if not ticker:
+    # This line should have exactly 4 spaces of indentation
+    ticker = st.sidebar.text_input("Enter Stock Ticker", "AAPL").strip().upper()
+    
+    if not ticker:
         st.error("Please enter a valid ticker symbol")
         return
 
