@@ -25,13 +25,14 @@ FINGPT_API_KEY = "AIzaTRDjNFU6WAx6FJ74zhm2vQqWyD5MsYKUcOk"  # Replace with actua
 NEWS_API_KEY = "3f8e6bb1fb72490b835c800afcadd1aa"      # Replace with actual key
 
 
-def fetch_stock_data(symbol, period="1y"):
+@lru_cache(maxsize=32)  # Caches up to 32 different ticker requests
+def fetch_stock_data_cached(symbol, period="1y"):
     try:
         stock = yf.Ticker(symbol)
         stock_data = stock.history(period=period)
         if stock_data.empty:
-            return pd.DataFrame(), "No data found for this ticker"  # Explicit return
-        return stock_data, None  # Success case returns (data, None)
+            return pd.DataFrame(), "No data found for this ticker"
+        return stock_data, None
     except Exception as e:
         return pd.DataFrame(), f"Error fetching stock data: {e}"
 
@@ -262,8 +263,17 @@ def main():
     data,error = fetch_stock_data(ticker, period)
     
     if data.empty:
-        st.error(f"Could not fetch data for {ticker}: {error}")  # Fixed f-string
-        return
+      if "Rate limited" in error:
+          st.error("""
+          ⚠️ Yahoo Finance rate limit reached. 
+          Please wait a few minutes and try again, or:
+          - Use the cached version if available
+          - Try again later
+          """)
+          st.stop()  # Prevents the app from trying to continue
+       else:
+           st.error(f"Error fetching data: {error}")
+       return
     
     # Analysis Sections
     if analysis_type == "Stock Analysis":
