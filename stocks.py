@@ -156,51 +156,129 @@ def display_stock_analysis(stock_data, ticker):
         fig3.update_layout(title="Technical Indicators")
         st.plotly_chart(fig3, use_container_width=True)
 
+def monte_carlo_simulation(data: pd.DataFrame, n_simulations: int = 1000, days: int = 180) -> dict:
+    """
+    Enhanced Monte Carlo simulation with moving average smoothing options
+    Returns dictionary containing:
+    - raw_simulations: Original simulation paths
+    - ma_simulations: Moving average smoothed paths
+    - wma_simulations: Weighted moving average smoothed paths
+    """
+    try:
+        # Calculate daily returns
+        returns = np.log(1 + data['Close'].pct_change())
+        mu = returns.mean()
+        sigma = returns.std()
+        last_price = data['Close'].iloc[-1]
+        
+        # Generate random walks
+        raw_simulations = np.zeros((days, n_simulations))
+        raw_simulations[0] = last_price
+        
+        for day in range(1, days):
+            shock = np.random.normal(mu, sigma, n_simulations)
+            raw_simulations[day] = raw_simulations[day-1] * np.exp(shock)
+        
+        # Apply smoothing techniques
+        window_size = min(20, days//10)  # Adaptive window size
+        
+        # Simple Moving Average
+        ma_simulations = np.zeros_like(raw_simulations)
+        for i in range(n_simulations):
+            ma_simulations[:, i] = pd.Series(raw_simulations[:, i]).rolling(window=window_size).mean().values
+        
+        # Weighted Moving Average (linear weights)
+        wma_simulations = np.zeros_like(raw_simulations)
+        weights = np.arange(1, window_size+1)  # Linear weights [1, 2, 3, ...]
+        weights = weights / weights.sum()      # Normalized
+        
+        for i in range(n_simulations):
+            series = pd.Series(raw_simulations[:, i])
+            wma_simulations[:, i] = series.rolling(window=window_size)\
+                                         .apply(lambda x: np.sum(weights * x))
+        
+        return {
+            'raw': raw_simulations,
+            'ma': ma_simulations,
+            'wma': wma_simulations
+        }
+        
+    except Exception as e:
+        raise Exception(f"Enhanced Monte Carlo simulation failed: {str(e)}")
+
 def display_monte_carlo(simulations):
+    """Enhanced display with smoothing options"""
+    st.subheader("Simulation Smoothing Options")
+    smooth_type = st.radio("Select smoothing type", 
+                          ["Raw", "Moving Average", "Weighted MA"],
+                          horizontal=True)
+    
+    # Select which simulations to show
+    if smooth_type == "Moving Average":
+        data = simulations['ma']
+    elif smooth_type == "Weighted MA":
+        data = simulations['wma']
+    else:
+        data = simulations['raw']
+    
     col1, col2 = st.columns(2)
     
     with col1:
         # Simulation Paths
         fig1 = go.Figure()
-        for i in range(min(20, simulations.shape[1])):
+        for i in range(min(20, data.shape[1])):
             fig1.add_trace(go.Scatter(
-                x=np.arange(simulations.shape[0]),
-                y=simulations[:, i],
+                x=np.arange(data.shape[0]),
+                y=data[:, i],
                 mode='lines',
                 line=dict(width=1),
                 showlegend=False
             ))
-        fig1.update_layout(title="Monte Carlo Simulation Paths", 
-                          xaxis_title="Days", 
-                          yaxis_title="Price")
+        fig1.update_layout(title=f"Monte Carlo Simulation Paths ({smooth_type})", 
+                         xaxis_title="Days", 
+                         yaxis_title="Price")
         st.plotly_chart(fig1, use_container_width=True)
     
     with col2:
         # Terminal Distribution
-        terminal_prices = simulations[-1, :]
+        terminal_prices = data[-1, :]
         fig2 = go.Figure()
         fig2.add_trace(go.Histogram(x=terminal_prices, name="Outcomes"))
-        fig2.update_layout(title="Terminal Price Distribution",
+        fig2.update_layout(title=f"Terminal Price Distribution ({smooth_type})",
                           xaxis_title="Price",
                           yaxis_title="Frequency")
         st.plotly_chart(fig2, use_container_width=True)
     
-    # Risk Metrics
-    st.subheader("Risk Analysis")
-    var_95 = np.percentile(terminal_prices, 5)
-    var_99 = np.percentile(terminal_prices, 1)
+    # Risk Metrics Comparison
+    st.subheader("Risk Metrics Comparison")
     
-    metrics = pd.DataFrame({
-        "Metric": ["5% VaR", "1% VaR", "Expected Value", "Best Case", "Worst Case"],
-        "Value": [
-            f"${var_95:.2f}", 
-            f"${var_99:.2f}",
-            f"${terminal_prices.mean():.2f}",
-            f"${terminal_prices.max():.2f}",
-            f"${terminal_prices.min():.2f}"
-        ]
-    })
-    st.table(metrics)
+    metrics = []
+    for name, sim_data in simulations.items():
+        tp = sim_data[-1, :]
+        metrics.append({
+            'Type': name.upper(),
+            '5% VaR': f"${np.percentile(tp, 5):.2f}",
+            '1% VaR': f"${np.percentile(tp, 1):.2f}",
+            'Expected Value': f"${tp.mean():.2f}",
+            'Volatility': f"{tp.std()/tp.mean()*100:.2f}%"
+        })
+    
+    st.table(pd.DataFrame(metrics))
+
+def get_fmp_ratios(ticker):
+    url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?apikey={FMP_API_KEY}"
+    response = requests.get(url)
+    if response.status_code == 200 and response.json():
+        return response.json()[0]  # Get most recent ratios
+    return None
+
+# Then display them
+ratios = get_fmp_ratios("AAPL")
+if ratios:
+    display_financial_ratios(ratios, "AAPL")
+else:
+    st.error("Could not fetch ratios from FMP")
+    
 
 def display_financial_ratios(ratios, ticker):
     # Benchmark data (mock)
@@ -247,6 +325,51 @@ def display_financial_ratios(ratios, ticker):
         st.warning(f"Higher volatility ({ratios['Volatility']}) than sector average ({sector_avg['Volatility']}%)")
     else:
         st.success(f"Lower volatility ({ratios['Volatility']}) than sector average ({sector_avg['Volatility']}%)")
+
+def train_holt_winters(data: pd.DataFrame, seasonal_periods: int) -> Tuple[object, str]:
+    """Train Holt-Winters forecasting model"""
+    try:
+        from statsmodels.tsa.holtwinters import ExponentialSmoothing
+        
+        model = ExponentialSmoothing(
+            data['Close'],
+            seasonal_periods=seasonal_periods,
+            trend='add',
+            seasonal='add'
+        ).fit()
+        return model, None
+    except Exception as e:
+        return None, f"Holt-Winters training failed: {str(e)}"
+
+def predict_holt_winters(model, periods: int = 30) -> pd.Series:
+    """Generate predictions using Holt-Winters model"""
+    try:
+        return model.forecast(periods)
+    except Exception as e:
+        raise Exception(f"Holt-Winters prediction failed: {str(e)}")
+
+def train_prophet_model(data: pd.DataFrame) -> object:
+    """Train Facebook Prophet model"""
+    try:
+        from prophet import Prophet
+        
+        df = data.reset_index()[['Date', 'Close']].rename(columns={'Date': 'ds', 'Close': 'y'})
+        model = Prophet()
+        model.fit(df)
+        return model
+    except Exception as e:
+        raise Exception(f"Prophet training failed: {str(e)}")
+
+def predict_prophet(model, periods: int = 30) -> pd.DataFrame:
+    """Generate predictions using Prophet model"""
+    try:
+        future = model.make_future_dataframe(periods=periods)
+        forecast = model.predict(future)
+        return forecast.tail(periods)['yhat']
+    except Exception as e:
+        raise Exception(f"Prophet prediction failed: {str(e)}")
+
+
 
 def display_predictions(historical_data, predictions, model_name):
     fig = go.Figure()
