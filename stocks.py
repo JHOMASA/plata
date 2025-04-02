@@ -329,73 +329,93 @@ def main():
     )
     
     # Fetch Data
-    data, error = get_stock_data(ticker, period)
-    
-    if data.empty:
-        if "rate limit" in error.lower():
-            st.error("""
-            ⚠️ API rate limit reached. 
-            Please wait a few minutes and try again.
-            """)
-        else:
-            st.error(f"Error fetching data: {error}")
-        st.stop()
+    try:
+        data, error = get_stock_data(ticker, period)
+        
+        if data.empty:
+            if error and "rate limit" in error.lower():
+                st.error("""
+                ⚠️ API rate limit reached. 
+                Please wait a few minutes and try again.
+                """)
+            else:
+                st.error(f"Error fetching data: {error if error else 'Unknown error'}")
+            return
+    except Exception as e:
+        st.error(f"Unexpected error during data fetch: {str(e)}")
+        return
     
     # Analysis Sections
-    if analysis_type == "Stock Analysis":
-        display_stock_analysis(data, ticker)
-        
-    elif analysis_type == "Monte Carlo":
-        st.header("🎲 Monte Carlo Simulation")
-        n_simulations = st.slider("Number of Simulations", 100, 5000, 1000)
-        time_horizon = st.slider("Time Horizon (days)", 30, 365, 180)
-        
-        if st.button("Run Simulation"):
-            simulations = monte_carlo_simulation(data, n_simulations, time_horizon)
-            display_monte_carlo(simulations)
-    
-    elif analysis_type == "Financial Ratios":
-        st.header("📈 Financial Ratios Analysis")
-        ratios = calculate_risk_metrics(data)
-        display_financial_ratios(ratios, ticker)
-    
-    elif analysis_type == "Predictions":
-        st.header("🔮 Price Predictions")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            model_type = st.selectbox(
-                "Select Prediction Model",
-                ["Holt-Winters", "Prophet", "LSTM", "ARIMA", "XGBoost"]
-            )
+    try:
+        if analysis_type == "Stock Analysis":
+            display_stock_analysis(data, ticker)
             
-        with col2:
-            if model_type == "Holt-Winters":
-                seasonality = st.radio(
-                    "Seasonality",
-                    ["Weekly (5)", "Monthly (21)", "Quarterly (63)"],
-                    horizontal=True
-                )
-                seasonal_periods = int(seasonality.split("(")[1].replace(")", ""))
+        elif analysis_type == "Monte Carlo":
+            st.header("🎲 Monte Carlo Simulation")
+            n_simulations = st.slider("Number of Simulations", 100, 5000, 1000)
+            time_horizon = st.slider("Time Horizon (days)", 30, 365, 180)
+            
+            if st.button("Run Simulation"):
+                try:
+                    simulations = monte_carlo_simulation(data, n_simulations, time_horizon)
+                    display_monte_carlo(simulations)
+                except Exception as e:
+                    st.error(f"Simulation failed: {str(e)}")
         
-        if st.button("Generate Predictions"):
-            with st.spinner(f"Training {model_type} model..."):
-                if model_type == "Holt-Winters":
-                    model, error = train_holt_winters(data, seasonal_periods)
-                    if model is None:
-                        st.error(error)
-                    else:
-                        predictions = predict_holt_winters(30)
-                        display_predictions(data, predictions, "Holt-Winters")
-                elif model_type == "Prophet":
-                    model = train_prophet_model(data)
-                    predictions = predict_prophet(model)
-                elif model_type == "LSTM":
-                    model, scaler = train_lstm_model(data)
-                    predictions = predict_lstm(model, scaler, data)
+        elif analysis_type == "Financial Ratios":
+            st.header("📈 Financial Ratios Analysis")
+            try:
+                ratios = calculate_risk_metrics(data)
+                if ratios:
+                    display_financial_ratios(ratios, ticker)
+                else:
+                    st.warning("Could not calculate financial ratios")
+            except Exception as e:
+                st.error(f"Financial ratios analysis failed: {str(e)}")
+        
+        elif analysis_type == "Predictions":
+            st.header("🔮 Price Predictions")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                model_type = st.selectbox(
+                    "Select Prediction Model",
+                    ["Holt-Winters", "Prophet", "LSTM", "ARIMA", "XGBoost"]
+                )
                 
-                display_predictions(data, predictions, model_type)
+            with col2:
+                if model_type == "Holt-Winters":
+                    seasonality = st.radio(
+                        "Seasonality",
+                        ["Weekly (5)", "Monthly (21)", "Quarterly (63)"],
+                        horizontal=True
+                    )
+                    seasonal_periods = int(seasonality.split("(")[1].replace(")", ""))
+            
+            if st.button("Generate Predictions"):
+                with st.spinner(f"Training {model_type} model..."):
+                    try:
+                        if model_type == "Holt-Winters":
+                            model, error = train_holt_winters(data, seasonal_periods)
+                            if model is None:
+                                st.error(error)
+                            else:
+                                predictions = predict_holt_winters(30)
+                                display_predictions(data, predictions, "Holt-Winters")
+                        elif model_type == "Prophet":
+                            model = train_prophet_model(data)
+                            predictions = predict_prophet(model)
+                            display_predictions(data, predictions, "Prophet")
+                        elif model_type == "LSTM":
+                            model, scaler = train_lstm_model(data)
+                            predictions = predict_lstm(model, scaler, data)
+                            display_predictions(data, predictions, "LSTM")
+                    except Exception as e:
+                        st.error(f"Prediction failed: {str(e)}")
+    
+    except Exception as e:
+        st.error(f"Application error: {str(e)}")
 
 if __name__ == "__main__":
     main()
