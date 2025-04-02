@@ -19,6 +19,12 @@ from statsmodels.tsa.arima.model import ARIMA
 from prophet import Prophet
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
+import time
+import random
+from sklearn.metrics import mean_absolute_error
+
+
+
 
 # Configuration
 FINGPT_API_KEY = "AIzaTRDjNFU6WAx6FJ74zhm2vQqWyD5MsYKUcOk"  # Replace with actual key
