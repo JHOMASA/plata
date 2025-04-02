@@ -263,7 +263,7 @@ def main():
     data,error = fetch_stock_data(ticker, period)
     
     if data.empty:
-      if "Rate limited" in error:
+       if "Rate limited" in error:
           st.error("""
           ⚠️ Yahoo Finance rate limit reached. 
           Please wait a few minutes and try again, or:
