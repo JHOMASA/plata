@@ -568,12 +568,12 @@ def main():
         ["Stock Analysis", "Monte Carlo", "Financial Ratios", "Predictions"]
     )
     
-    # Ticker Input
-    ticker = st.sidebar.text_input("Enter Stock Ticker", "AAPL").strip().upper()
+     # Ticker Input
+     ticker = st.sidebar.text_input("Enter Stock Ticker", "AAPL").strip().upper()
      if not ticker:
         st.error("Please enter a valid ticker symbol")
         return
-    if analysis_type == "Financial Ratios":
+     if analysis_type == "Financial Ratios":
         st.header("📈 Financial Ratios Analysis")
         try:
             ratios = get_yahoo_ratios(ticker)  # Now ticker is defined
