@@ -280,193 +280,126 @@ else:
     st.error("Could not fetch ratios from FMP")
     
 
-def display_financial_ratios(ratios, ticker):
+def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
     """
-    Displays financial ratios using FMP API data structure
+    Displays financial ratios from FMP API data
     Args:
-        ratios: Dict from FMP's /v3/ratios endpoint
-        ticker: Stock ticker symbol (for display)
+        ratios: Dictionary from FMP's /v3/ratios endpoint
+        ticker: Stock ticker symbol for display purposes
     """
     try:
-        # First get sector averages from FMP (mock example - replace with actual API call)
-        # In production, you might call: f"https://financialmodelingprep.com/api/v3/ratios-avg/{ticker}?apikey={FMP_API_KEY}"
-        sector_avg = {
-            'priceEarningsRatio': 15.2,
-            'priceToBookRatio': 2.8,
-            'debtEquityRatio': 0.85,
-            'currentRatio': 1.5,
-            'returnOnEquity': 0.15,  # FMP returns as decimal
-            'returnOnAssets': 0.075,  # FMP returns as decimal
-            'volatility': 0.125,      # Would need to calculate from historical data
-            'sharpeRatio': 1.3,       # Would need to calculate
-            'maximumDrawdown': 0.082  # Would need to calculate
-        }
+        if not ratios:
+            st.error("No ratio data available")
+            return
 
-        # Map of FMP API field names to display names
+        # FMP field to display name mapping
         ratio_map = {
             'priceEarningsRatio': 'P/E Ratio',
             'priceToBookRatio': 'P/B Ratio',
             'debtEquityRatio': 'Debt/Equity',
             'currentRatio': 'Current Ratio',
             'returnOnEquity': 'ROE',
-            'returnOnAssets': 'ROA',
-            'volatility': 'Volatility',
-            'sharpeRatio': 'Sharpe Ratio',
-            'maximumDrawdown': 'Max Drawdown'
+            'returnOnAssets': 'ROA'
         }
 
-        # Create display-ready data
+        # Mock sector averages (replace with actual FMP sector data)
+        sector_avg = {
+            'priceEarningsRatio': 15.2,
+            'priceToBookRatio': 2.8,
+            'debtEquityRatio': 0.85,
+            'currentRatio': 1.5,
+            'returnOnEquity': 0.15,
+            'returnOnAssets': 0.075
+        }
+
+        # Prepare display data
         display_data = {}
-        available_metrics = []
-        
         for api_key, display_name in ratio_map.items():
-            if api_key in ratios:
-                # Convert decimals to percentages where appropriate
-                if display_name in ['ROE', 'ROA', 'Volatility', 'Max Drawdown']:
+            if api_key in ratios and ratios[api_key] is not None:
+                # Convert decimals to percentages for ROE/ROA
+                if display_name in ['ROE', 'ROA']:
                     display_data[display_name] = f"{ratios[api_key] * 100:.2f}%"
                 else:
                     display_data[display_name] = f"{ratios[api_key]:.2f}"
-                available_metrics.append(display_name)
-            else:
-                st.warning(f"Metric not available from FMP: {display_name}")
 
-        if not available_metrics:
-            st.error("No financial ratio data available from FMP for this company")
+        if not display_data:
+            st.error("No valid ratio data available for display")
             return
 
-        # Visualization - Tabbed Interface
-        tab1, tab2 = st.tabs(["Bar Chart", "Key Metrics"])
+        # Create visualization
+        st.subheader(f"Financial Ratios for {ticker}")
         
-        with tab1:
-            # Create comparison chart only for available metrics
-            fig = go.Figure()
+        # Bar chart
+        fig = go.Figure()
+        
+        # Add company bars
+        fig.add_trace(go.Bar(
+            x=list(display_data.keys()),
+            y=[float(v.strip('%')) if '%' in v else float(v) for v in display_data.values()],
+            name=ticker,
+            text=list(display_data.values()),
+            textposition='auto'
+        ))
+        
+        # Add sector average bars (only for available metrics)
+        sector_x = []
+        sector_y = []
+        for display_name in display_data.keys():
+            api_key = next(k for k, v in ratio_map.items() if v == display_name)
+            if api_key in sector_avg:
+                sector_x.append(display_name)
+                if display_name in ['ROE', 'ROA']:
+                    sector_y.append(sector_avg[api_key] * 100)
+                else:
+                    sector_y.append(sector_avg[api_key])
+        
+        fig.add_trace(go.Bar(
+            x=sector_x,
+            y=sector_y,
+            name='Sector Average',
+            text=[f"{y:.1f}{'%' if x in ['ROE', 'ROA'] else ''}" for x, y in zip(sector_x, sector_y)],
+            textposition='auto'
+        ))
+        
+        fig.update_layout(
+            barmode='group',
+            title=f"{ticker} vs Sector Averages",
+            yaxis_title="Value"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Metric analysis
+        st.subheader("Metric Analysis")
+        
+        cols = st.columns(2)
+        with cols[0]:
+            if 'P/E Ratio' in display_data:
+                pe = float(display_data['P/E Ratio'])
+                st.metric("P/E Ratio", 
+                         display_data['P/E Ratio'],
+                         f"{'High' if pe > 20 else 'Normal' if pe > 10 else 'Low'} vs market")
             
-            # Convert percentage strings back to numbers for plotting
-            def parse_value(val):
-                if isinstance(val, str) and '%' in val:
-                    return float(val.strip('%'))
-                return float(val)
+            if 'Current Ratio' in display_data:
+                cr = float(display_data['Current Ratio'])
+                st.metric("Current Ratio", 
+                         display_data['Current Ratio'],
+                         "Strong" if cr > 2 else "Adequate" if cr > 1 else "Weak")
+        
+        with cols[1]:
+            if 'Debt/Equity' in display_data:
+                de = float(display_data['Debt/Equity'])
+                st.metric("Debt/Equity", 
+                         display_data['Debt/Equity'],
+                         "High" if de > 1 else "Moderate" if de > 0.5 else "Low")
             
-            fig.add_trace(go.Bar(
-                x=available_metrics,
-                y=[parse_value(display_data[m]) for m in available_metrics],
-                name=ticker,
-                marker_color='#1f77b4',
-                text=[display_data[m] for m in available_metrics],
-                textposition='auto'
-            ))
-            
-            # Only show sector averages for available metrics
-            sector_x = []
-            sector_y = []
-            for m in available_metrics:
-                # Find the API key for this display name
-                api_key = next(k for k,v in ratio_map.items() if v == m)
-                if api_key in sector_avg:
-                    sector_x.append(m)
-                    # Convert sector averages to same format as company data
-                    if m in ['ROE', 'ROA', 'Volatility', 'Max Drawdown']:
-                        sector_y.append(sector_avg[api_key] * 100)
-                    else:
-                        sector_y.append(sector_avg[api_key])
-            
-            fig.add_trace(go.Bar(
-                x=sector_x,
-                y=sector_y,
-                name='Sector Average',
-                marker_color='#ff7f0e',
-                text=[f"{y:.1f}{'%' if m in ['ROE', 'ROA', 'Volatility', 'Max Drawdown'] else ''}" 
-                     for m, y in zip(sector_x, sector_y)],
-                textposition='auto'
-            ))
-            
-            fig.update_layout(
-                title=f"{ticker} vs Sector Averages (Available Metrics)",
-                barmode='group',
-                yaxis_title="Value",
-                height=500
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        with tab2:
-            # Detailed metric analysis for available metrics
-            st.subheader("💰 Valuation Metrics")
-            cols = st.columns(2)
-            
-            with cols[0]:
-                if 'P/E Ratio' in display_data:
-                    pe = parse_value(display_data['P/E Ratio'])
-                    sector_pe = sector_avg['priceEarningsRatio']
-                    if pe > sector_pe * 1.2:
-                        st.error(f"P/E Ratio: {display_data['P/E Ratio']} (High vs sector {sector_pe:.1f})")
-                    elif pe < sector_pe * 0.8:
-                        st.success(f"P/E Ratio: {display_data['P/E Ratio']} (Low vs sector {sector_pe:.1f})")
-                    else:
-                        st.info(f"P/E Ratio: {display_data['P/E Ratio']} (In-line with sector {sector_pe:.1f})")
-            
-            with cols[1]:
-                if 'P/B Ratio' in display_data:
-                    pb = parse_value(display_data['P/B Ratio'])
-                    sector_pb = sector_avg['priceToBookRatio']
-                    if pb > sector_pb * 1.2:
-                        st.error(f"P/B Ratio: {display_data['P/B Ratio']} (High vs sector {sector_pb:.1f})")
-                    elif pb < sector_pb * 0.8:
-                        st.success(f"P/B Ratio: {display_data['P/B Ratio']} (Low vs sector {sector_pb:.1f})")
-                    else:
-                        st.info(f"P/B Ratio: {display_data['P/B Ratio']} (In-line with sector {sector_pb:.1f})")
-
-            st.subheader("🏦 Financial Health")
-            cols = st.columns(2)
-            
-            with cols[0]:
-                if 'Debt/Equity' in display_data:
-                    de = parse_value(display_data['Debt/Equity'])
-                    sector_de = sector_avg['debtEquityRatio']
-                    if de > sector_de * 1.3:
-                        st.error(f"Debt/Equity: {display_data['Debt/Equity']} (High vs sector {sector_de:.1f})")
-                    elif de < sector_de * 0.7:
-                        st.success(f"Debt/Equity: {display_data['Debt/Equity']} (Low vs sector {sector_de:.1f})")
-                    else:
-                        st.info(f"Debt/Equity: {display_data['Debt/Equity']} (In-line with sector {sector_de:.1f})")
-            
-            with cols[1]:
-                if 'Current Ratio' in display_data:
-                    cr = parse_value(display_data['Current Ratio'])
-                    sector_cr = sector_avg['currentRatio']
-                    if cr < 1:
-                        st.error(f"Current Ratio: {display_data['Current Ratio']} (Potential liquidity issues)")
-                    elif cr > sector_cr * 1.2:
-                        st.success(f"Current Ratio: {display_data['Current Ratio']} (Strong vs sector {sector_cr:.1f})")
-                    else:
-                        st.info(f"Current Ratio: {display_data['Current Ratio']} (Adequate vs sector {sector_cr:.1f})")
-
-            st.subheader("📈 Performance Metrics")
-            cols = st.columns(2)
-            
-            with cols[0]:
-                if 'ROE' in display_data:
-                    roe = parse_value(display_data['ROE'])
-                    sector_roe = sector_avg['returnOnEquity'] * 100
-                    if roe > sector_roe * 1.2:
-                        st.success(f"ROE: {display_data['ROE']} (Strong vs sector {sector_roe:.1f}%)")
-                    elif roe < sector_roe * 0.8:
-                        st.error(f"ROE: {display_data['ROE']} (Weak vs sector {sector_roe:.1f}%)")
-                    else:
-                        st.info(f"ROE: {display_data['ROE']} (In-line with sector {sector_roe:.1f}%)")
-            
-            with cols[1]:
-                if 'ROA' in display_data:
-                    roa = parse_value(display_data['ROA'])
-                    sector_roa = sector_avg['returnOnAssets'] * 100
-                    if roa > sector_roa * 1.2:
-                        st.success(f"ROA: {display_data['ROA']} (Strong vs sector {sector_roa:.1f}%)")
-                    elif roa < sector_roa * 0.8:
-                        st.error(f"ROA: {display_data['ROA']} (Weak vs sector {sector_roa:.1f}%)")
-                    else:
-                        st.info(f"ROA: {display_data['ROA']} (In-line with sector {sector_roa:.1f}%)")
+            if 'ROE' in display_data:
+                roe = float(display_data['ROE'].strip('%'))
+                st.metric("Return on Equity", 
+                         display_data['ROE'],
+                         "Strong" if roe > 15 else "Average" if roe > 8 else "Weak")
 
     except Exception as e:
-        st.error(f"Error displaying financial ratios: {str(e)}")
+        st.error(f"Error displaying ratios: {str(e)}")
 
 def train_holt_winters(data: pd.DataFrame, seasonal_periods: int) -> Tuple[object, str]:
     """Train Holt-Winters forecasting model"""
