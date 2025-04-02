@@ -30,8 +30,8 @@ def fetch_stock_data(symbol, period="1y"):
         stock = yf.Ticker(symbol)
         stock_data = stock.history(period=period)
         if stock_data.empty:
-            raise ValueError("No data found for this ticker.")
-        return stock_data
+            return pd.DataFrame(), "No data found for this ticker"  # Explicit return
+        return stock_data, None  # Success case returns (data, None)
     except Exception as e:
         return pd.DataFrame(), f"Error fetching stock data: {e}"
 
@@ -245,8 +245,12 @@ def main():
     )
     
     # Ticker Input
-    ticker = st.sidebar.text_input("Enter Stock Ticker", "AAPL").upper()
-    
+    ticker = st.sidebar.text_input("Enter Stock Ticker", "AAPL").strip().upper()
+
+    if not ticker:
+        st.error("Please enter a valid ticker symbol")
+        return
+        
     # Date Range Selector
     period = st.sidebar.selectbox(
         "Time Period",
@@ -258,7 +262,7 @@ def main():
     data,error = fetch_stock_data(ticker, period)
     
     if data.empty:
-        st.error("Could not fetch {error} data for this ticker")
+        st.error(f"Could not fetch data for {ticker}: {error}")  # Fixed f-string
         return
     
     # Analysis Sections
