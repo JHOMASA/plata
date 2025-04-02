@@ -31,16 +31,31 @@ FINGPT_API_KEY = "AIzaTRDjNFU6WAx6FJ74zhm2vQqWyD5MsYKUcOk"  # Replace with actua
 NEWS_API_KEY = "3f8e6bb1fb72490b835c800afcadd1aa"      # Replace with actual key
 
 
-@lru_cache(maxsize=32)  # Caches up to 32 different ticker requests
-def fetch_stock_data_cached(symbol, period="1y"):
+@lru_cache(maxsize=32)
+def fetch_stock_data_cached(symbol: str, period: str = "1y"):
+    """Fetch stock data with caching. Returns a tuple of (success, data_or_error)"""
     try:
+        # Add delay to prevent rate limiting
+        time.sleep(random.uniform(1, 2))
+        
         stock = yf.Ticker(symbol)
         stock_data = stock.history(period=period)
         if stock_data.empty:
-            return pd.DataFrame(), "No data found for this ticker"
-        return stock_data, None
+            return False, "No data found for this ticker"
+        
+        # Convert DataFrame to JSON-serializable format for caching
+        return True, stock_data.to_json(date_format='iso')
     except Exception as e:
-        return pd.DataFrame(), f"Error fetching stock data: {e}"
+        return False, f"Error fetching stock data: {e}"
+def get_stock_data(symbol: str, period: str = "1y"):
+    """Wrapper that handles the cached data conversion"""
+    success, result = fetch_stock_data_cached(symbol, period)
+    
+    if success:
+        # Convert JSON back to DataFrame
+        return pd.read_json(result), None
+    else:
+        return pd.DataFrame(), result
 
 # Enhanced visualization for all sections
 def display_stock_analysis(stock_data, ticker):
@@ -266,7 +281,7 @@ def main():
     )
     
     # Fetch Data
-    data,error = fetch_stock_data(ticker, period)
+    data,error = get_stock_data(ticker, period)
     
     if data.empty:
        if "Rate limited" in error:
