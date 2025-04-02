@@ -35,68 +35,46 @@ FINGPT_API_KEY = "AIzaTRDjNFU6WAx6FJ74zhm2vQqWyD5MsYKUcOk"  # Replace with actua
 NEWS_API_KEY = "3f8e6bb1fb72490b835c800afcadd1aa"      # Replace with actual key
 
 
+st.set_page_config(layout="wide")
+st.title("📊 Advanced Stock Analysis Dashboard")
 @lru_cache(maxsize=32)
-def fetch_stock_data_fmp(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
-    """Fetch stock data from Financial Modeling Prep API"""
+def fetch_stock_data_yahoo(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
+    """Fetch stock data from Yahoo Finance API"""
     try:
-        # First verify the symbol exists
-        profile_url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={FMP_API_KEY}"
-        profile_response = requests.get(profile_url)
+        # Map period to Yahoo Finance format
+        period_map = {
+            "1mo": "1mo",
+            "3mo": "3mo",
+            "6mo": "6mo",
+            "1y": "1y",
+            "2y": "2y",
+            "5y": "5y"
+        }
         
-        if profile_response.status_code != 200 or not profile_response.json():
-            return pd.DataFrame(), "Invalid stock symbol"
+        yahoo_period = period_map.get(period, "1y")
         
-        # Map period to days
-        period_days = {
-            "1mo": 30,
-            "3mo": 90,
-            "6mo": 180,
-            "1y": 365,
-            "2y": 730,
-            "5y": 1825
-        }.get(period, 365)
+        # Fetch data from Yahoo Finance
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(period=yahoo_period)
         
-        # Fetch historical data
-        hist_url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}?apikey={FMP_API_KEY}"
-        response = requests.get(hist_url)
-        response.raise_for_status()
-        data = response.json()
-        
-        if 'historical' not in data:
-            return pd.DataFrame(), "No historical data available"
-        
-        df = pd.DataFrame(data['historical'])
-        df['date'] = pd.to_datetime(df['date'])
-        df.set_index('date', inplace=True)
-        df.sort_index(inplace=True)
-        
-        # Filter for the requested period
-        if len(df) > 0:
-            end_date = df.index.max()
-            start_date = end_date - pd.Timedelta(days=period_days)
-            df = df.loc[start_date:end_date]
-        
-        # Standardize column names
-        df = df.rename(columns={
-            'close': 'Close',
-            'open': 'Open',
-            'high': 'High',
-            'low': 'Low',
-            'volume': 'Volume'
-        })
+        if df.empty:
+            return pd.DataFrame(), "No data available for this symbol"
+            
+        # Clean and standardize the data
+        df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
+        df.index = pd.to_datetime(df.index)
+        df.index.name = 'Date'
         
         return df, None
         
-    except requests.exceptions.RequestException as e:
-        return pd.DataFrame(), f"Network error: {str(e)}"
     except Exception as e:
-        return pd.DataFrame(), f"Unexpected error: {str(e)}"
+        return pd.DataFrame(), f"Error fetching data: {str(e)}"
 
 @lru_cache(maxsize=32)
 def fetch_stock_data_cached(symbol: str, period: str = "1y") -> Tuple[bool, str]:
     """Fetch stock data with caching"""
     try:
-        df, error = fetch_stock_data_fmp(symbol, period)
+        df, error = fetch_stock_data_yahoo(symbol, period)
         if error:
             return False, error
         return True, df.to_json(date_format='iso')
@@ -110,31 +88,31 @@ def get_stock_data(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
         return pd.read_json(result), None
     return pd.DataFrame(), result
 
-def get_fmp_ratios(ticker: str) -> Dict[str, Any]:
-    """Enhanced FMP ratio fetcher with better error handling"""
+def get_yahoo_ratios(ticker: str) -> Dict[str, Any]:
+    """Get financial ratios from Yahoo Finance"""
     try:
-        url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?apikey={FMP_API_KEY}"
-        response = requests.get(url, timeout=10)
+        yf_ticker = yf.Ticker(ticker)
+        info = yf_ticker.info
         
-        if response.status_code != 200:
-            st.error(f"FMP API returned status code {response.status_code}")
+        if not info:
+            st.error("No financial data available for this ticker")
             return None
             
-        data = response.json()
+        # Extract relevant ratios
+        ratios = {
+            'priceEarningsRatio': info.get('trailingPE'),
+            'priceToBookRatio': info.get('priceToBook'),
+            'debtEquityRatio': info.get('debtToEquity'),
+            'currentRatio': info.get('currentRatio'),
+            'returnOnEquity': info.get('returnOnEquity'),
+            'returnOnAssets': info.get('returnOnAssets')
+        }
         
-        if not data or not isinstance(data, list):
-            st.error("No valid ratio data found in FMP response")
-            return None
-            
-        return data[0]  # Return most recent ratios
+        return ratios
         
-    except requests.exceptions.RequestException as e:
-        st.error(f"Network error fetching ratios: {str(e)}")
-        return None
     except Exception as e:
-        st.error(f"Unexpected error fetching ratios: {str(e)}")
+        st.error(f"Error fetching ratios: {str(e)}")
         return None
-
 # Then display them
 ratios = get_fmp_ratios("AAPL")
 if ratios:
@@ -584,10 +562,6 @@ def display_predictions(historical_data, predictions, model_name):
 
 # Updated main app structure
 def main():
-    st.set_page_config(layout="wide")
-    st.title("📊 Advanced Stock Analysis Dashboard")
-    
-    # Sidebar Navigation
     st.sidebar.header("Navigation")
     analysis_type = st.sidebar.radio(
         "Select Analysis Type",
