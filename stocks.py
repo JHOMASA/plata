@@ -570,9 +570,16 @@ def main():
     
     # Ticker Input
     ticker = st.sidebar.text_input("Enter Stock Ticker", "AAPL").strip().upper()
-    if not ticker:
-        st.error("Please enter a valid ticker symbol")
-        return
+    if analysis_type == "Financial Ratios":
+        st.header("📈 Financial Ratios Analysis")
+        try:
+            ratios = get_yahoo_ratios(ticker)  # Now ticker is defined
+            if ratios:
+                display_financial_ratios(ratios, ticker)
+            else:
+                st.warning("Could not fetch financial ratios")
+        except Exception as e:
+            st.error(f"Financial ratios analysis failed: {str(e)}")
         
     # Date Range Selector
     period = st.sidebar.selectbox(
