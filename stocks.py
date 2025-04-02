@@ -566,13 +566,18 @@ def main():
     analysis_type = st.sidebar.radio(
         "Select Analysis Type",
         ["Stock Analysis", "Monte Carlo", "Financial Ratios", "Predictions"]
-    )
+     )
     
      # Ticker Input
+     
      ticker = st.sidebar.text_input("Enter Stock Ticker", "AAPL").strip().upper()
      if not ticker:
         st.error("Please enter a valid ticker symbol")
         return
+
+
+
+
      if analysis_type == "Financial Ratios":
         st.header("📈 Financial Ratios Analysis")
         try:
@@ -583,7 +588,10 @@ def main():
                 st.warning("Could not fetch financial ratios")
         except Exception as e:
             st.error(f"Financial ratios analysis failed: {str(e)}")
-        
+
+
+
+
     # Date Range Selector
     period = st.sidebar.selectbox(
         "Time Period",
@@ -592,6 +600,7 @@ def main():
     )
     
     # Fetch Data
+    
     try:
         data, error = get_stock_data(ticker, period)
         
