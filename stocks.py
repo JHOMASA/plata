@@ -109,12 +109,30 @@ def get_stock_data(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
         return pd.read_json(result), None
     return pd.DataFrame(), result
 
-def get_fmp_ratios(ticker):
-    url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?apikey={FMP_API_KEY}"
-    response = requests.get(url)
-    if response.status_code == 200 and response.json():
-        return response.json()[0]  # Get most recent ratios
-    return None
+def get_fmp_ratios(ticker: str) -> Dict[str, Any]:
+    """Enhanced FMP ratio fetcher with better error handling"""
+    try:
+        url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?apikey={FMP_API_KEY}"
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code != 200:
+            st.error(f"FMP API returned status code {response.status_code}")
+            return None
+            
+        data = response.json()
+        
+        if not data or not isinstance(data, list):
+            st.error("No valid ratio data found in FMP response")
+            return None
+            
+        return data[0]  # Return most recent ratios
+        
+    except requests.exceptions.RequestException as e:
+        st.error(f"Network error fetching ratios: {str(e)}")
+        return None
+    except Exception as e:
+        st.error(f"Unexpected error fetching ratios: {str(e)}")
+        return None
 
 # Then display them
 ratios = get_fmp_ratios("AAPL")
@@ -388,6 +406,11 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
         if not ratios:
             st.error("No ratio data available")
             return
+        if 'go' not in globals():
+            raise ImportError("Plotly graph_objects not imported properly")
+            
+        # Create the figure safely
+        fig = go.Figure()  # This will now work
 
         # FMP field to display name mapping
         ratio_map = {
