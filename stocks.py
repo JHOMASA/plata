@@ -108,53 +108,71 @@ def get_stock_data(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
     if success:
         return pd.read_json(result), None
     return pd.DataFrame(), result
-    
-def display_stock_analysis(stock_data, ticker):
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Price History
-        fig1 = go.Figure()
-        fig1.add_trace(go.Scatter(x=stock_data.index, y=stock_data['Close'], name='Close Price'))
-        fig1.update_layout(title=f"{ticker} Price History", xaxis_title="Date", yaxis_title="Price")
-        st.plotly_chart(fig1, use_container_width=True)
+
+def get_fmp_ratios(ticker):
+    url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?apikey={FMP_API_KEY}"
+    response = requests.get(url)
+    if response.status_code == 200 and response.json():
+        return response.json()[0]  # Get most recent ratios
+    return None
+
+# Then display them
+ratios = get_fmp_ratios("AAPL")
+if ratios:
+    display_financial_ratios(ratios, "AAPL")
+else:
+    st.error("Could not fetch ratios from FMP")
+
+def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Calculate financial ratios from stock data that align with FMP API structure
+    Args:
+        data: DataFrame containing stock price history with columns ['Close', 'Volume', etc.]
+    Returns:
+        Dictionary of calculated ratios matching FMP's field names
+    """
+    try:
+        if data.empty:
+            return {}
         
-    with col2:
-        # Volume Analysis
-        fig2 = go.Figure()
-        fig2.add_trace(go.Bar(x=stock_data.index, y=stock_data['Volume'], name='Volume'))
-        fig2.update_layout(title="Trading Volume", xaxis_title="Date", yaxis_title="Volume")
-        st.plotly_chart(fig2, use_container_width=True)
-    
-    # Technical Indicators
-    st.subheader("Technical Indicators")
-    indicators = st.multiselect("Select indicators", 
-                               ["SMA", "EMA", "RSI", "MACD", "Bollinger Bands"],
-                               default=["SMA", "RSI"])
-    
-    if indicators:
-        fig3 = go.Figure()
-        fig3.add_trace(go.Scatter(x=stock_data.index, y=stock_data['Close'], name='Close Price'))
+        ratios = {}
         
-        if "SMA" in indicators:
-            sma = stock_data['Close'].rolling(20).mean()
-            fig3.add_trace(go.Scatter(x=stock_data.index, y=sma, name='20-day SMA'))
+        # Calculate volatility (annualized)
+        returns = np.log(1 + data['Close'].pct_change())
+        if not returns.empty:
+            ratios['volatility'] = returns.std() * np.sqrt(252)  # Annualized volatility
         
-        if "RSI" in indicators:
-            delta = stock_data['Close'].diff()
-            gain = delta.where(delta > 0, 0)
-            loss = -delta.where(delta < 0, 0)
-            avg_gain = gain.rolling(14).mean()
-            avg_loss = loss.rolling(14).mean()
-            rs = avg_gain / avg_loss
-            rsi = 100 - (100 / (1 + rs))
-            fig_rsi = go.Figure()
-            fig_rsi.add_trace(go.Scatter(x=stock_data.index, y=rsi, name='RSI'))
-            fig_rsi.update_layout(title="Relative Strength Index (RSI)", yaxis_range=[0,100])
-            st.plotly_chart(fig_rsi, use_container_width=True)
+        # Calculate max drawdown
+        rolling_max = data['Close'].cummax()
+        daily_drawdown = data['Close']/rolling_max - 1
+        ratios['maximumDrawdown'] = daily_drawdown.min()
         
-        fig3.update_layout(title="Technical Indicators")
-        st.plotly_chart(fig3, use_container_width=True)
+        # Calculate Sharpe ratio (assuming 0 risk-free rate)
+        if not returns.empty and returns.std() != 0:
+            ratios['sharpeRatio'] = returns.mean() / returns.std() * np.sqrt(252)
+        
+        # Additional metrics that would come from FMP's fundamental data
+        # These would normally come from FMP's API but we include placeholders
+        ratios['priceEarningsRatio'] = None  # Would come from FMP
+        ratios['priceToBookRatio'] = None    # Would come from FMP
+        ratios['debtEquityRatio'] = None     # Would come from FMP
+        ratios['currentRatio'] = None        # Would come from FMP
+        ratios['returnOnEquity'] = None      # Would come from FMP
+        ratios['returnOnAssets'] = None      # Would come from FMP
+        
+        # Convert all values to appropriate types
+        for k, v in ratios.items():
+            if v is not None:
+                if k in ['volatility', 'maximumDrawdown', 'returnOnEquity', 'returnOnAssets']:
+                    ratios[k] = float(v)
+                else:
+                    ratios[k] = float(v) if not pd.isna(v) else None
+        
+        return ratios
+        
+    except Exception as e:
+        st.error(f"Error calculating risk metrics: {str(e)}")
+        return {}
 
 def monte_carlo_simulation(data: pd.DataFrame, n_simulations: int = 1000, days: int = 180) -> dict:
     """
@@ -205,6 +223,98 @@ def monte_carlo_simulation(data: pd.DataFrame, n_simulations: int = 1000, days: 
         
     except Exception as e:
         raise Exception(f"Enhanced Monte Carlo simulation failed: {str(e)}")
+def train_holt_winters(data: pd.DataFrame, seasonal_periods: int) -> Tuple[object, str]:
+    """Train Holt-Winters forecasting model"""
+    try:
+        from statsmodels.tsa.holtwinters import ExponentialSmoothing
+        
+        model = ExponentialSmoothing(
+            data['Close'],
+            seasonal_periods=seasonal_periods,
+            trend='add',
+            seasonal='add'
+        ).fit()
+        return model, None
+    except Exception as e:
+        return None, f"Holt-Winters training failed: {str(e)}"
+
+def predict_holt_winters(model, periods: int = 30) -> pd.Series:
+    """Generate predictions using Holt-Winters model"""
+    try:
+        return model.forecast(periods)
+    except Exception as e:
+        raise Exception(f"Holt-Winters prediction failed: {str(e)}")
+
+def train_prophet_model(data: pd.DataFrame) -> object:
+    """Train Facebook Prophet model"""
+    try:
+        from prophet import Prophet
+        
+        df = data.reset_index()[['Date', 'Close']].rename(columns={'Date': 'ds', 'Close': 'y'})
+        model = Prophet()
+        model.fit(df)
+        return model
+    except Exception as e:
+        raise Exception(f"Prophet training failed: {str(e)}")
+
+def predict_prophet(model, periods: int = 30) -> pd.DataFrame:
+    """Generate predictions using Prophet model"""
+    try:
+        future = model.make_future_dataframe(periods=periods)
+        forecast = model.predict(future)
+        return forecast.tail(periods)['yhat']
+    except Exception as e:
+        raise Exception(f"Prophet prediction failed: {str(e)}")
+
+
+    
+def display_stock_analysis(stock_data, ticker):
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Price History
+        fig1 = go.Figure()
+        fig1.add_trace(go.Scatter(x=stock_data.index, y=stock_data['Close'], name='Close Price'))
+        fig1.update_layout(title=f"{ticker} Price History", xaxis_title="Date", yaxis_title="Price")
+        st.plotly_chart(fig1, use_container_width=True)
+        
+    with col2:
+        # Volume Analysis
+        fig2 = go.Figure()
+        fig2.add_trace(go.Bar(x=stock_data.index, y=stock_data['Volume'], name='Volume'))
+        fig2.update_layout(title="Trading Volume", xaxis_title="Date", yaxis_title="Volume")
+        st.plotly_chart(fig2, use_container_width=True)
+    
+    # Technical Indicators
+    st.subheader("Technical Indicators")
+    indicators = st.multiselect("Select indicators", 
+                               ["SMA", "EMA", "RSI", "MACD", "Bollinger Bands"],
+                               default=["SMA", "RSI"])
+    
+    if indicators:
+        fig3 = go.Figure()
+        fig3.add_trace(go.Scatter(x=stock_data.index, y=stock_data['Close'], name='Close Price'))
+        
+        if "SMA" in indicators:
+            sma = stock_data['Close'].rolling(20).mean()
+            fig3.add_trace(go.Scatter(x=stock_data.index, y=sma, name='20-day SMA'))
+        
+        if "RSI" in indicators:
+            delta = stock_data['Close'].diff()
+            gain = delta.where(delta > 0, 0)
+            loss = -delta.where(delta < 0, 0)
+            avg_gain = gain.rolling(14).mean()
+            avg_loss = loss.rolling(14).mean()
+            rs = avg_gain / avg_loss
+            rsi = 100 - (100 / (1 + rs))
+            fig_rsi = go.Figure()
+            fig_rsi.add_trace(go.Scatter(x=stock_data.index, y=rsi, name='RSI'))
+            fig_rsi.update_layout(title="Relative Strength Index (RSI)", yaxis_range=[0,100])
+            st.plotly_chart(fig_rsi, use_container_width=True)
+        
+        fig3.update_layout(title="Technical Indicators")
+        st.plotly_chart(fig3, use_container_width=True)
+
 
 def display_monte_carlo(simulations):
     """Enhanced display with smoothing options"""
@@ -265,20 +375,7 @@ def display_monte_carlo(simulations):
     
     st.table(pd.DataFrame(metrics))
 
-def get_fmp_ratios(ticker):
-    url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?apikey={FMP_API_KEY}"
-    response = requests.get(url)
-    if response.status_code == 200 and response.json():
-        return response.json()[0]  # Get most recent ratios
-    return None
 
-# Then display them
-ratios = get_fmp_ratios("AAPL")
-if ratios:
-    display_financial_ratios(ratios, "AAPL")
-else:
-    st.error("Could not fetch ratios from FMP")
-    
 
 def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
     """
@@ -401,48 +498,6 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
     except Exception as e:
         st.error(f"Error displaying ratios: {str(e)}")
 
-def train_holt_winters(data: pd.DataFrame, seasonal_periods: int) -> Tuple[object, str]:
-    """Train Holt-Winters forecasting model"""
-    try:
-        from statsmodels.tsa.holtwinters import ExponentialSmoothing
-        
-        model = ExponentialSmoothing(
-            data['Close'],
-            seasonal_periods=seasonal_periods,
-            trend='add',
-            seasonal='add'
-        ).fit()
-        return model, None
-    except Exception as e:
-        return None, f"Holt-Winters training failed: {str(e)}"
-
-def predict_holt_winters(model, periods: int = 30) -> pd.Series:
-    """Generate predictions using Holt-Winters model"""
-    try:
-        return model.forecast(periods)
-    except Exception as e:
-        raise Exception(f"Holt-Winters prediction failed: {str(e)}")
-
-def train_prophet_model(data: pd.DataFrame) -> object:
-    """Train Facebook Prophet model"""
-    try:
-        from prophet import Prophet
-        
-        df = data.reset_index()[['Date', 'Close']].rename(columns={'Date': 'ds', 'Close': 'y'})
-        model = Prophet()
-        model.fit(df)
-        return model
-    except Exception as e:
-        raise Exception(f"Prophet training failed: {str(e)}")
-
-def predict_prophet(model, periods: int = 30) -> pd.DataFrame:
-    """Generate predictions using Prophet model"""
-    try:
-        future = model.make_future_dataframe(periods=periods)
-        forecast = model.predict(future)
-        return forecast.tail(periods)['yhat']
-    except Exception as e:
-        raise Exception(f"Prophet prediction failed: {str(e)}")
 
 
 
