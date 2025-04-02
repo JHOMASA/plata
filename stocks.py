@@ -113,12 +113,7 @@ def get_yahoo_ratios(ticker: str) -> Dict[str, Any]:
     except Exception as e:
         st.error(f"Error fetching ratios: {str(e)}")
         return None
-# Then display them
-ratios = get_yahoo_ratios(ticker)
-if ratios:
-    display_financial_ratios(ratios, ticker)
-else:
-    st.error("Could not fetch ratios from Yahoo Finance")
+
 
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
     """
@@ -571,7 +566,6 @@ def main():
     
     # This line should have exactly 4 spaces of indentation
     ticker = st.sidebar.text_input("Enter Stock Ticker", "AAPL").strip().upper()
-    
     if not ticker:
         st.error("Please enter a valid ticker symbol")
         return
