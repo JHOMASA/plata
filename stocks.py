@@ -379,6 +379,43 @@ def main():
     
     except Exception as e:
         st.error(f"Application error: {str(e)}")
+        col1, col2 = st.columns(2)
+            
+            with col1:
+                model_type = st.selectbox(
+                    "Select Prediction Model",
+                    ["Holt-Winters", "Prophet", "LSTM", "ARIMA", "XGBoost"]
+                )
+                
+            with col2:
+                if model_type == "Holt-Winters":
+                    seasonality = st.radio(
+                        "Seasonality",
+                        ["Weekly (5)", "Monthly (21)", "Quarterly (63)"],
+                        horizontal=True
+                    )
+                    seasonal_periods = int(seasonality.split("(")[1].replace(")", ""))
+            
+            if st.button("Generate Predictions"):
+                with st.spinner(f"Training {model_type} model..."):
+                    try:
+                        if model_type == "Holt-Winters":
+                            model, error = train_holt_winters(data, seasonal_periods)
+                            if model is None:
+                                st.error(error)
+                            else:
+                                predictions = predict_holt_winters(30)
+                                display_predictions(data, predictions, "Holt-Winters")
+                        elif model_type == "Prophet":
+                            model = train_prophet_model(data)
+                            predictions = predict_prophet(model)
+                            display_predictions(data, predictions, "Prophet")
+                        elif model_type == "LSTM":
+                            model, scaler = train_lstm_model(data)
+                            predictions = predict_lstm(model, scaler, data)
+                            display_predictions(data, predictions, "LSTM")
+                    except Exception as e:
+                        st.error(f"Prediction failed: {str(e)}")
 
 if __name__ == "__main__":
     main()
