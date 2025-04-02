@@ -114,11 +114,11 @@ def get_yahoo_ratios(ticker: str) -> Dict[str, Any]:
         st.error(f"Error fetching ratios: {str(e)}")
         return None
 # Then display them
-ratios = get_fmp_ratios("AAPL")
+ratios = get_yahoo_ratios(ticker)
 if ratios:
-    display_financial_ratios(ratios, "AAPL")
+    display_financial_ratios(ratios, ticker)
 else:
-    st.error("Could not fetch ratios from FMP")
+    st.error("Could not fetch ratios from Yahoo Finance")
 
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
     """
