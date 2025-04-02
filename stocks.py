@@ -38,65 +38,62 @@ NEWS_API_KEY = "3f8e6bb1fb72490b835c800afcadd1aa"      # Replace with actual key
 def fetch_stock_data_fmp(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
     """Fetch stock data from Financial Modeling Prep API"""
     try:
-        # Map period to FMP's available timeframes
-        period_map = {
-            "1mo": "1month",
-            "3mo": "3month",
-            "6mo": "6month",
-            "1y": "1year",
-            "2y": "2year",
-            "5y": "5year"
-        }
+        # First verify the symbol exists
+        profile_url = f"https://financialmodelingprep.com/api/v3/profile/{symbol}?apikey={FMP_API_KEY}"
+        profile_response = requests.get(profile_url)
         
-        timeframe = period_map.get(period, "1year")
+        if profile_response.status_code != 200 or not profile_response.json():
+            return pd.DataFrame(), "Invalid stock symbol"
         
-        # Fetch daily prices
-        url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}?apikey={FMP_API_KEY}"
-        response = requests.get(url)
+        # Map period to days
+        period_days = {
+            "1mo": 30,
+            "3mo": 90,
+            "6mo": 180,
+            "1y": 365,
+            "2y": 730,
+            "5y": 1825
+        }.get(period, 365)
+        
+        # Fetch historical data
+        hist_url = f"https://financialmodelingprep.com/api/v3/historical-price-full/{symbol}?apikey={FMP_API_KEY}"
+        response = requests.get(hist_url)
         response.raise_for_status()
         data = response.json()
         
         if 'historical' not in data:
-            return pd.DataFrame(), "No data found for this ticker"
+            return pd.DataFrame(), "No historical data available"
         
         df = pd.DataFrame(data['historical'])
         df['date'] = pd.to_datetime(df['date'])
         df.set_index('date', inplace=True)
+        df.sort_index(inplace=True)
         
-        # Filter based on selected period
-        end_date = df.index.max()
-        if period == "1mo":
-            start_date = end_date - pd.DateOffset(months=1)
-        elif period == "3mo":
-            start_date = end_date - pd.DateOffset(months=3)
-        elif period == "6mo":
-            start_date = end_date - pd.DateOffset(months=6)
-        elif period == "1y":
-            start_date = end_date - pd.DateOffset(years=1)
-        elif period == "2y":
-            start_date = end_date - pd.DateOffset(years=2)
-        elif period == "5y":
-            start_date = end_date - pd.DateOffset(years=5)
-            
-        df = df.loc[start_date:end_date]
+        # Filter for the requested period
+        if len(df) > 0:
+            end_date = df.index.max()
+            start_date = end_date - pd.Timedelta(days=period_days)
+            df = df.loc[start_date:end_date]
         
-        # Rename columns to match Yahoo Finance format
+        # Standardize column names
         df = df.rename(columns={
+            'close': 'Close',
             'open': 'Open',
             'high': 'High',
             'low': 'Low',
-            'close': 'Close',
-            'volume': 'Volume',
-            'adjClose': 'Adj Close'
+            'volume': 'Volume'
         })
         
         return df, None
         
+    except requests.exceptions.RequestException as e:
+        return pd.DataFrame(), f"Network error: {str(e)}"
     except Exception as e:
-        return pd.DataFrame(), f"Error fetching stock data: {e}"
+        return pd.DataFrame(), f"Unexpected error: {str(e)}"
+
 @lru_cache(maxsize=32)
 def fetch_stock_data_cached(symbol: str, period: str = "1y") -> Tuple[bool, str]:
-    """Fetch stock data with caching using FMP API"""
+    """Fetch stock data with caching"""
     try:
         df, error = fetch_stock_data_fmp(symbol, period)
         if error:
@@ -105,7 +102,13 @@ def fetch_stock_data_cached(symbol: str, period: str = "1y") -> Tuple[bool, str]
     except Exception as e:
         return False, f"Error: {str(e)}"
 
-# Enhanced visualization for all sections
+def get_stock_data(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
+    """Main function to get stock data"""
+    success, result = fetch_stock_data_cached(symbol, period)
+    if success:
+        return pd.read_json(result), None
+    return pd.DataFrame(), result
+    
 def display_stock_analysis(stock_data, ticker):
     col1, col2 = st.columns(2)
     
@@ -316,7 +319,6 @@ def main():
     
     # Ticker Input
     ticker = st.sidebar.text_input("Enter Stock Ticker", "AAPL").strip().upper()
-
     if not ticker:
         st.error("Please enter a valid ticker symbol")
         return
@@ -334,13 +336,11 @@ def main():
         
         if data.empty:
             if error and "rate limit" in error.lower():
-                st.error("""
-                ⚠️ API rate limit reached. 
-                Please wait a few minutes and try again.
-                """)
+                st.error("⚠️ API rate limit reached. Please wait and try again.")
             else:
                 st.error(f"Error fetching data: {error if error else 'Unknown error'}")
             return
+            
     except Exception as e:
         st.error(f"Unexpected error during data fetch: {str(e)}")
         return
@@ -375,44 +375,7 @@ def main():
         
         elif analysis_type == "Predictions":
             st.header("🔮 Price Predictions")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                model_type = st.selectbox(
-                    "Select Prediction Model",
-                    ["Holt-Winters", "Prophet", "LSTM", "ARIMA", "XGBoost"]
-                )
-                
-            with col2:
-                if model_type == "Holt-Winters":
-                    seasonality = st.radio(
-                        "Seasonality",
-                        ["Weekly (5)", "Monthly (21)", "Quarterly (63)"],
-                        horizontal=True
-                    )
-                    seasonal_periods = int(seasonality.split("(")[1].replace(")", ""))
-            
-            if st.button("Generate Predictions"):
-                with st.spinner(f"Training {model_type} model..."):
-                    try:
-                        if model_type == "Holt-Winters":
-                            model, error = train_holt_winters(data, seasonal_periods)
-                            if model is None:
-                                st.error(error)
-                            else:
-                                predictions = predict_holt_winters(30)
-                                display_predictions(data, predictions, "Holt-Winters")
-                        elif model_type == "Prophet":
-                            model = train_prophet_model(data)
-                            predictions = predict_prophet(model)
-                            display_predictions(data, predictions, "Prophet")
-                        elif model_type == "LSTM":
-                            model, scaler = train_lstm_model(data)
-                            predictions = predict_lstm(model, scaler, data)
-                            display_predictions(data, predictions, "LSTM")
-                    except Exception as e:
-                        st.error(f"Prediction failed: {str(e)}")
+            st.warning("Prediction functionality not yet implemented")
     
     except Exception as e:
         st.error(f"Application error: {str(e)}")
