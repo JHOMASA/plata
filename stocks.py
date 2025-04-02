@@ -375,19 +375,16 @@ def main():
         
         elif analysis_type == "Predictions":
             st.header("🔮 Price Predictions")
-            st.warning("Prediction functionality not yet implemented")
-    
-    except Exception as e:
-        st.error(f"Application error: {str(e)}")
-        col1, col2 = st.columns(2)
             
-        with col1:
+            col1, col2 = st.columns(2)
+            
+            with col1:
                 model_type = st.selectbox(
                     "Select Prediction Model",
                     ["Holt-Winters", "Prophet", "LSTM", "ARIMA", "XGBoost"]
                 )
                 
-        with col2:
+            with col2:
                 if model_type == "Holt-Winters":
                     seasonality = st.radio(
                         "Seasonality",
@@ -396,7 +393,7 @@ def main():
                     )
                     seasonal_periods = int(seasonality.split("(")[1].replace(")", ""))
             
-         if st.button("Generate Predictions"):
+            if st.button("Generate Predictions"):
                 with st.spinner(f"Training {model_type} model..."):
                     try:
                         if model_type == "Holt-Winters":
@@ -416,6 +413,9 @@ def main():
                             display_predictions(data, predictions, "LSTM")
                     except Exception as e:
                         st.error(f"Prediction failed: {str(e)}")
+    
+    except Exception as e:
+        st.error(f"Application error: {str(e)}")
 
 if __name__ == "__main__":
     main()
