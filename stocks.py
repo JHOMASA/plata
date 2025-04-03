@@ -937,14 +937,92 @@ def main():
         
         elif analysis_type == "Financial Ratios":
             st.header("📈 Financial Ratios Analysis")
-            try:
-                ratios = calculate_risk_metrics(data)
-                if ratios:
-                    display_financial_ratios(ratios, ticker)
-                else:
-                    st.warning("Could not calculate financial ratios")
-            except Exception as e:
-                st.error(f"Financial ratios analysis failed: {str(e)}")
+
+            # Create tabs for different ratio types
+            tab1, tab2 = st.tabs(["Fundamental Ratios", "Market Risk Metrics"])
+    
+            with tab1:
+                st.subheader("Fundamental Ratios")
+                try:
+                    # Get fundamental ratios (Yahoo Finance + Alpha Vantage fallback)
+                    ratios = get_yahoo_ratios(ticker)
+            
+                    if ratios:
+                        # Filter only fundamental ratios for display
+                        fundamental_ratios = {
+                            'priceEarningsRatio': ratios.get('priceEarningsRatio'),
+                            'priceToBookRatio': ratios.get('priceToBookRatio'),
+                            'debtEquityRatio': ratios.get('debtEquityRatio'),
+                            'currentRatio': ratios.get('currentRatio'),
+                            'returnOnEquity': ratios.get('returnOnEquity'),
+                            'returnOnAssets': ratios.get('returnOnAssets')
+                        }
+                
+                        if any(v is not None for v in fundamental_ratios.values()):
+                            display_financial_ratios(fundamental_ratios, ticker)
+                        else:
+                            st.warning("No fundamental ratio data available")
+                    else:
+                        st.warning("Could not retrieve fundamental ratios")
+                
+                except Exception as e:
+                    st.error(f"Fundamental ratios analysis failed: {str(e)}")
+    
+            with tab2:
+                st.subheader("Market Risk Metrics")
+                try:
+                    # Calculate market risk metrics from price data
+                    risk_metrics = calculate_risk_metrics(data)
+            
+                    if risk_metrics:
+                        # Display risk metrics in columns
+                        col1, col2, col3 = st.columns(3)
+                
+                        with col1:
+                            if risk_metrics.get('volatility') is not None:
+                                st.metric("Annualized Volatility", 
+                                     f"{risk_metrics['volatility']:.2%}",
+                                     help="Standard deviation of daily returns, annualized")
+                
+                        with col2:
+                            if risk_metrics.get('maximumDrawdown') is not None:
+                                st.metric("Maximum Drawdown", 
+                                     f"{risk_metrics['maximumDrawdown']:.2%}",
+                                     help="Largest peak-to-trough decline")
+                
+                        with col3:
+                            if risk_metrics.get('sharpeRatio') is not None:
+                                st.metric("Sharpe Ratio", 
+                                     f"{risk_metrics['sharpeRatio']:.2f}",
+                                     help="Risk-adjusted return (assuming 0 risk-free rate)")
+                
+                        # Add visualization for volatility over time
+                        if not data.empty and 'Close' in data.columns:
+                            st.subheader("Historical Volatility (30-day rolling)")
+                            returns = np.log(data['Close']).diff()
+                            rolling_vol = returns.rolling(window=30).std() * np.sqrt(252)
+                    
+                            fig = go.Figure()
+                            fig.add_trace(go.Scatter(
+                                x=rolling_vol.index,
+                                y=rolling_vol,
+                                mode='lines',
+                                name='30-day Volatility'
+                            ))
+                            fig.update_layout(
+                                yaxis_tickformat=".0%",
+                                hovermode="x",
+                                height=300
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("Could not calculate risk metrics")
+                
+                except Exception as e:
+                    st.error(f"Risk metrics analysis failed: {str(e)}")
+            
+
+            
         
         elif analysis_type == "Predictions":
             st.header("🔮 Price Predictions")
