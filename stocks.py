@@ -866,14 +866,15 @@ def main():
                     "Select Prediction Model",
                     ["Holt-Winters", "Prophet", "LSTM", "Random Forest", "XGBoost"]
                 )
+            seasonal_periods = 5
             if model_type == "Holt-Winters":
                 with col2:
                     seasonality_choice = st.radio(
                         "Seasonality",
                         ["Weekly (5)", "Monthly (21)", "Quarterly (63)"],
                         horizontal=True
-            )
-            seasonal_periods = int(seasonality_choice.split("(")[1].replace(")", ""))
+                    )
+                    seasonal_periods = int(seasonality_choice.split("(")[1].replace(")", ""))
     
             if st.button("Generate Predictions"):
                 with st.spinner(f"Training {model_type} model..."):
