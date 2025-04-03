@@ -88,32 +88,50 @@ def get_stock_data(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
         return pd.read_json(result), None
     return pd.DataFrame(), result
 
-def get_fmp_ratios(ticker: str, api_key: str) -> Dict[str, Any]:
-    """Fetch ROE and ROA from Financial Modeling Prep (FMP) API."""
+def get_alpha_vantage_ratios(ticker: str) -> Dict[str, Any]:
+    """Fetch financial ratios from Alpha Vantage API."""
     try:
-        url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?apikey={api_key}"  # Fixed: use api_key parameter
-        response = requests.get(url)
-        response.raise_for_status()  # Corrected: call on response object
+        url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={ticker}&apikey={ALPHA_VANTAGE_API_KEY}"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
         data = response.json()
         
         if not data:
-            st.warning(f"No financial data available for this ticker from FMP for {ticker}.")  # Fixed f-string
-            return {"returnOnEquity": None, "returnOnAssets": None}
-        
-        latest_data = data[0]  # Most recent fiscal year data
-        
-        return {
-            "returnOnEquity": latest_data.get("returnOnEquity"),
-            "returnOnAssets": latest_data.get("returnOnAssets")
+            st.warning(f"No financial data available from Alpha Vantage for {ticker}")
+            return None
+            
+        # Extract and convert relevant ratios
+        ratios = {
+            'priceEarningsRatio': safe_float(data.get('PERatio')),
+            'priceToBookRatio': safe_float(data.get('PriceToBookRatio')),
+            'debtEquityRatio': safe_float(data.get('DebtToEquity')),
+            'currentRatio': safe_float(data.get('CurrentRatio')),
+            'returnOnEquity': percentage_to_float(data.get('ReturnOnEquityTTM')),
+            'returnOnAssets': percentage_to_float(data.get('ReturnOnAssetsTTM'))
         }
-    
+        
+        return ratios
+        
     except requests.exceptions.RequestException as e:
-        st.error(f"API request failed: {str(e)}")
-    except (IndexError, KeyError) as e:
-        st.error(f"Data format error: {str(e)}")  # Fixed missing space
+        st.error(f"Alpha Vantage API request failed: {str(e)}")
     except Exception as e:
-        st.error(f"Unexpected error: {str(e)}")  # Fixed missing parenthesis
-    return {"returnOnEquity": None, "returnOnAssets": None}
+        st.error(f"Error processing Alpha Vantage data: {str(e)}")
+    return None
+def safe_float(value):
+    """Convert value to float safely."""
+    try:
+        return float(value) if value is not None else None
+    except (ValueError, TypeError):
+        return None
+
+def percentage_to_float(value):
+    """Convert percentage string to float (e.g., '15.25%' -> 0.1525)."""
+    try:
+        if value and isinstance(value, str) and '%' in value:
+            return float(value.strip('%')) / 100
+        return safe_float(value)
+    except (ValueError, TypeError):
+        return None
 
 def get_yahoo_ratios(ticker: str, fmp_api_key: str = None) -> Dict[str, Any]:  # Added fmp_api_key parameter
     """Get financial ratios from Yahoo Finance"""
@@ -136,53 +154,155 @@ def get_yahoo_ratios(ticker: str, fmp_api_key: str = None) -> Dict[str, Any]:  #
         }
         
         # Add FMP fallback if needed
-        if fmp_api_key and (ratios["returnOnEquity"] is None or ratios["returnOnAssets"] is None):  # Fixed variable name
-            fmp_data = get_fmp_ratios(ticker, fmp_api_key)
-            ratios["returnOnEquity"] = ratios["returnOnEquity"] or fmp_data["returnOnEquity"]
-            ratios["returnOnAssets"] = ratios["returnOnAssets"] or fmp_data["returnOnAssets"]  # Fixed variable names
+        if ratios['returnOnEquity'] is None or ratios['returnOnAssets'] is None:
+            av_ratios = get_alpha_vantage_ratios(ticker)
+            if av_ratios:
+                ratios['returnOnEquity'] = ratios['returnOnEquity'] or av_ratios['returnOnEquity']
+                ratios['returnOnAssets'] = ratios['returnOnAssets'] or av_ratios['returnOnAssets']
         
         return {k: float(v) if v is not None else None for k, v in ratios.items()}
     except Exception as e:
         st.error(f"Error fetching ratios: {str(e)}")
         return None
+def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
+    """Displays financial ratios with visualization."""
+    try:
+        if not ratios:
+            st.error("No ratio data available")
+            return
+            
+        # FMP field to display name mapping
+        ratio_map = {
+            'priceEarningsRatio': 'P/E Ratio',
+            'priceToBookRatio': 'P/B Ratio',
+            'debtEquityRatio': 'Debt/Equity',
+            'currentRatio': 'Current Ratio',
+            'returnOnEquity': 'ROE',
+            'returnOnAssets': 'ROA'
+        }
+
+        # Sector averages (example values - replace with real data)
+        sector_avg = {
+            'priceEarningsRatio': 15.2,
+            'priceToBookRatio': 2.8,
+            'debtEquityRatio': 0.85,
+            'currentRatio': 1.5,
+            'returnOnEquity': 0.15,
+            'returnOnAssets': 0.075
+        }
+
+        # Prepare display data
+        display_data = {}
+        for api_key, display_name in ratio_map.items():
+            if api_key in ratios and ratios[api_key] is not None:
+                if display_name in ['ROE', 'ROA']:
+                    display_data[display_name] = f"{ratios[api_key] * 100:.2f}%"
+                else:
+                    display_data[display_name] = f"{ratios[api_key]:.2f}"
+
+        if not display_data:
+            st.error("No valid ratio data available for display")
+            return
+
+        # Create visualization
+        st.subheader(f"Financial Ratios for {ticker}")
+        
+        # Bar chart
+        fig = go.Figure()
+        
+        # Add company bars
+        fig.add_trace(go.Bar(
+            x=list(display_data.keys()),
+            y=[float(v.strip('%')) if '%' in v else float(v) for v in display_data.values()],
+            name=ticker,
+            text=list(display_data.values()),
+            textposition='auto'
+        ))
+        
+        # Add sector average bars (only for available metrics)
+        sector_x = []
+        sector_y = []
+        for display_name in display_data.keys():
+            api_key = next(k for k, v in ratio_map.items() if v == display_name)
+            if api_key in sector_avg:
+                sector_x.append(display_name)
+                if display_name in ['ROE', 'ROA']:
+                    sector_y.append(sector_avg[api_key] * 100)
+                else:
+                    sector_y.append(sector_avg[api_key])
+        
+        fig.add_trace(go.Bar(
+            x=sector_x,
+            y=sector_y,
+            name='Sector Average',
+            text=[f"{y:.1f}{'%' if x in ['ROE', 'ROA'] else ''}" for x, y in zip(sector_x, sector_y)],
+            textposition='auto'
+        ))
+        
+        fig.update_layout(
+            barmode='group',
+            title=f"{ticker} vs Sector Averages",
+            yaxis_title="Value"
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Metric analysis
+        st.subheader("Metric Analysis")
+        
+        cols = st.columns(2)
+        with cols[0]:
+            if 'P/E Ratio' in display_data:
+                pe = float(display_data['P/E Ratio'])
+                st.metric("P/E Ratio", 
+                         display_data['P/E Ratio'],
+                         f"{'High' if pe > 20 else 'Normal' if pe > 10 else 'Low'} vs market")
+            
+            if 'Current Ratio' in display_data:
+                cr = float(display_data['Current Ratio'])
+                st.metric("Current Ratio", 
+                         display_data['Current Ratio'],
+                         "Strong" if cr > 2 else "Adequate" if cr > 1 else "Weak")
+        
+        with cols[1]:
+            if 'Debt/Equity' in display_data:
+                de = float(display_data['Debt/Equity'])
+                st.metric("Debt/Equity", 
+                         display_data['Debt/Equity'],
+                         "High" if de > 1 else "Moderate" if de > 0.5 else "Low")
+            
+            if 'ROE' in display_data:
+                roe = float(display_data['ROE'].strip('%'))
+                st.metric("Return on Equity", 
+                         display_data['ROE'],
+                         "Strong" if roe > 15 else "Average" if roe > 8 else "Weak")
+
+    except Exception as e:
+        st.error(f"Error displaying ratios: {str(e)}")
 
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
-    """
-    Calculate financial ratios from stock data that align with FMP API structure
-    Args:
-        data: DataFrame containing stock price history with columns ['Close', 'Volume', etc.]
-    Returns:
-        Dictionary of calculated ratios matching FMP's field names
-    """
+    """Calculate market risk metrics from price data."""
     try:
-        if data.empty or "Close" not in data.columns:
+        if data.empty or 'Close' not in data.columns:
             return {}
         
         ratios = {}
-        
-        # Calculate volatility (annualized)
         returns = np.log(1 + data['Close'].pct_change()).dropna()
-        if not returns.empty:
-            ratios['volatility'] = returns.std() * np.sqrt(252)  # Annualized volatility
-            ratios['sharpeRatio'] = (returns.mean() / returns.std() * np.sqrt(252)) if returns.std() != 0 else None  # Fixed syntax
         
-        # Calculate max drawdown
+        if not returns.empty:
+            ratios.update({
+                'volatility': returns.std() * np.sqrt(252),
+                'sharpeRatio': (returns.mean() / returns.std() * np.sqrt(252)) if returns.std() != 0 else None,
+            })
+        
         rolling_max = data['Close'].cummax()
         daily_drawdown = data['Close']/rolling_max - 1
         ratios['maximumDrawdown'] = daily_drawdown.min()
         
-        # Remove fundamental ratios (they should come from other functions)
-        # Keep only market-based metrics
-        return {
-            'volatility': float(ratios['volatility']) if 'volatility' in ratios else None,
-            'maximumDrawdown': float(ratios['maximumDrawdown']) if 'maximumDrawdown' in ratios else None,
-            'sharpeRatio': float(ratios['sharpeRatio']) if 'sharpeRatio' in ratios and ratios['sharpeRatio'] is not None else None
-        }
+        return {k: float(v) if v is not None else None for k, v in ratios.items()}
         
     except Exception as e:
-        st.error(f"Error calculating risk metrics: {str(e)}")
+        st.error(f"Risk calculation error: {str(e)}")
         return {}
-
 def monte_carlo_simulation(data: pd.DataFrame, n_simulations: int = 1000, days: int = 180) -> dict:
     """
     Enhanced Monte Carlo simulation with moving average smoothing options
