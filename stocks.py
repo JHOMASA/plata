@@ -820,7 +820,7 @@ def main():
                                 display_predictions(data, predictions, "Holt-Winters")
             
                         elif model_type == "Arima":
-                            model = train_arima(data)
+                            model = train_arima_model(data)
                             predictions = predict_arima(model, 30)
                             display_predictions(data, predictions, "Arima")
             
