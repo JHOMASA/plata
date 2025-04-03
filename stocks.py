@@ -237,41 +237,51 @@ def predict_holt_winters(model, periods: int = 30) -> pd.Series:
     except Exception as e:
         raise Exception(f"Holt-Winters prediction failed: {str(e)}")
 
-def prepare_prophet_data(data: pd.DataFrame) -> pd.DataFrame:
-    """Prepares data for Prophet model"""
-    # Make sure we have a Date column and Close column
-    df = data.reset_index()  # This ensures Date becomes a column if it was the index
-    df = df[['Date', 'Close']].copy()
+def prepare_for_prophet(data: pd.DataFrame) -> pd.DataFrame:
+    """Transforms your stock data into Prophet-compatible format"""
+    # Create a clean copy to avoid modifying original data
+    df = data.copy()
     
-    # Rename columns for Prophet
-    df = df.rename(columns={'Date': 'ds', 'Close': 'y'})
+    # Ensure we have a Date column (convert index if needed)
+    if 'Date' not in df.columns:
+        df = df.reset_index()
     
-    # Convert to datetime if not already
-    df['ds'] = pd.to_datetime(df['ds'])
+    # Select only the columns we need and rename them
+    prophet_df = df[['Date', 'Close']].rename(
+        columns={'Date': 'ds', 'Close': 'y'}
+    )
     
-    # Drop any NA values
-    df = df.dropna()
+    # Convert to proper datetime format
+    prophet_df['ds'] = pd.to_datetime(prophet_df['ds'])
     
-    return df
+    # Remove any missing values
+    prophet_df = prophet_df.dropna()
+    
+    return prophet_df
 
-def train_prophet_model(data: pd.DataFrame) -> object:
-    """Train Facebook Prophet model with proper error handling"""
+def train_prophet(data: pd.DataFrame) -> object:
+    """Trains Prophet model with robust error handling"""
     try:
         from prophet import Prophet
         
         # Prepare the data
-        df = prepare_prophet_data(data)
+        df = prepare_for_prophet(data)
         
-        # Validate we have the required columns
+        # Validate data
+        if len(df) < 2:
+            raise ValueError("Not enough data points (need at least 2)")
         if not all(col in df.columns for col in ['ds', 'y']):
-            raise ValueError("DataFrame must contain 'ds' and 'y' columns")
-            
-        # Initialize and fit model
+            raise ValueError("Data must contain 'ds' and 'y' columns")
+        
+        # Initialize model with reasonable defaults for stocks
         model = Prophet(
-            daily_seasonality=False,
+            daily_seasonality=False,  # Typically not useful for stocks
             weekly_seasonality=True,
-            yearly_seasonality=True
+            yearly_seasonality=True,
+            changepoint_prior_scale=0.05  # Less sensitive to sudden changes
         )
+        
+        # Fit the model
         model.fit(df)
         
         return model
@@ -279,17 +289,19 @@ def train_prophet_model(data: pd.DataFrame) -> object:
     except Exception as e:
         raise Exception(f"Prophet training failed: {str(e)}")
 
-def predict_prophet(model, periods: int = 30) -> pd.DataFrame:
-    """Generate predictions using Prophet model"""
+def predict_with_prophet(model, periods: int = 30) -> pd.Series:
+    """Generates predictions from trained Prophet model"""
     try:
-        # Create future dataframe
+        # Create future dates
         future = model.make_future_dataframe(periods=periods, freq='D')
         
         # Generate forecast
         forecast = model.predict(future)
         
-        # Return only the future predictions
-        return forecast.tail(periods)[['ds', 'yhat']].set_index('ds')['yhat']
+        # Return only the predictions (not the training data)
+        predictions = forecast.tail(periods).set_index('ds')['yhat']
+        
+        return predictions
         
     except Exception as e:
         raise Exception(f"Prophet prediction failed: {str(e)}")
