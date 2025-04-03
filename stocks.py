@@ -91,13 +91,13 @@ def get_stock_data(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
 def get_fmp_ratios(ticker: str, api_key: str) -> Dict[str, Any]:
     """Fetch ROE and ROA from Financial Modeling Prep (FMP) API."""
     try:
-        url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?apikey={FMP_API_KEY}"
+        url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?apikey={api_key}"  # Fixed: use api_key parameter
         response = requests.get(url)
-        response = raise_for_status()
+        response.raise_for_status()  # Corrected: call on response object
         data = response.json()
         
         if not data:
-            st.warning("No financial data available for this ticker from FMP for {ticker}.")
+            st.warning(f"No financial data available for this ticker from FMP for {ticker}.")  # Fixed f-string
             return {"returnOnEquity": None, "returnOnAssets": None}
         
         latest_data = data[0]  # Most recent fiscal year data
@@ -110,12 +110,12 @@ def get_fmp_ratios(ticker: str, api_key: str) -> Dict[str, Any]:
     except requests.exceptions.RequestException as e:
         st.error(f"API request failed: {str(e)}")
     except (IndexError, KeyError) as e:
-        st.error(f"Data format error:{str(e)}")
+        st.error(f"Data format error: {str(e)}")  # Fixed missing space
     except Exception as e:
-        st.error(f"Unexpected error: {str(e)"})
+        st.error(f"Unexpected error: {str(e)}")  # Fixed missing parenthesis
     return {"returnOnEquity": None, "returnOnAssets": None}
 
-def get_yahoo_ratios(ticker: str) -> Dict[str, Any]:
+def get_yahoo_ratios(ticker: str, fmp_api_key: str = None) -> Dict[str, Any]:  # Added fmp_api_key parameter
     """Get financial ratios from Yahoo Finance"""
     try:
         yf_ticker = yf.Ticker(ticker)
@@ -131,18 +131,20 @@ def get_yahoo_ratios(ticker: str) -> Dict[str, Any]:
             'priceToBookRatio': info.get('priceToBook'),
             'debtEquityRatio': info.get('debtToEquity'),
             'currentRatio': info.get('currentRatio'),
-            'returnOnEquity': info.get('returnOnEquity'),
+            'returnOnEquity': info.get('returnOnEquity'),  # Fixed typo in key
             'returnOnAssets': info.get('returnOnAssets')
         }
-        if fmp_api_key and (retios["returnOnEquity"] is None or ratios["returnOnAssets"] is None):
+        
+        # Add FMP fallback if needed
+        if fmp_api_key and (ratios["returnOnEquity"] is None or ratios["returnOnAssets"] is None):  # Fixed variable name
             fmp_data = get_fmp_ratios(ticker, fmp_api_key)
             ratios["returnOnEquity"] = ratios["returnOnEquity"] or fmp_data["returnOnEquity"]
-            retios["returnOnAssets"] = rations["returnOnAssets"] or fmp_data["returnOnAssets"]
+            ratios["returnOnAssets"] = ratios["returnOnAssets"] or fmp_data["returnOnAssets"]  # Fixed variable names
+        
         return {k: float(v) if v is not None else None for k, v in ratios.items()}
     except Exception as e:
         st.error(f"Error fetching ratios: {str(e)}")
         return None
-
 
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
     """
@@ -159,39 +161,23 @@ def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
         ratios = {}
         
         # Calculate volatility (annualized)
-        returns = np.log(1 + data['Close'].pct_change())
+        returns = np.log(1 + data['Close'].pct_change()).dropna()
         if not returns.empty:
-            ratios['volatility'] = returns.std() * np.sqrt(252)  # Annualized volatilit,
-            ratios["sharpeRatio"] = (returns.mean() /return.std() * np.sqrt(252)) if returns.std()!=0 else None,
-            })
+            ratios['volatility'] = returns.std() * np.sqrt(252)  # Annualized volatility
+            ratios['sharpeRatio'] = (returns.mean() / returns.std() * np.sqrt(252)) if returns.std() != 0 else None  # Fixed syntax
         
         # Calculate max drawdown
         rolling_max = data['Close'].cummax()
         daily_drawdown = data['Close']/rolling_max - 1
         ratios['maximumDrawdown'] = daily_drawdown.min()
         
-        # Calculate Sharpe ratio (assuming 0 risk-free rate)
-        if not returns.empty and returns.std() != 0:
-            ratios['sharpeRatio'] = returns.mean() / returns.std() * np.sqrt(252)
-        
-        # Additional metrics that would come from FMP's fundamental data
-        # These would normally come from FMP's API but we include placeholders
-        ratios['priceEarningsRatio'] = None  # Would come from FMP
-        ratios['priceToBookRatio'] = None    # Would come from FMP
-        ratios['debtEquityRatio'] = None     # Would come from FMP
-        ratios['currentRatio'] = None        # Would come from FMP
-        ratios['returnOnEquity'] = None      # Would come from FMP
-        ratios['returnOnAssets'] = None      # Would come from FMP
-        
-        # Convert all values to appropriate types
-        for k, v in ratios.items():
-            if v is not None:
-                if k in ['volatility', 'maximumDrawdown', 'returnOnEquity', 'returnOnAssets']:
-                    ratios[k] = float(v)
-                else:
-                    ratios[k] = float(v) if not pd.isna(v) else None
-        
-        return ratios
+        # Remove fundamental ratios (they should come from other functions)
+        # Keep only market-based metrics
+        return {
+            'volatility': float(ratios['volatility']) if 'volatility' in ratios else None,
+            'maximumDrawdown': float(ratios['maximumDrawdown']) if 'maximumDrawdown' in ratios else None,
+            'sharpeRatio': float(ratios['sharpeRatio']) if 'sharpeRatio' in ratios and ratios['sharpeRatio'] is not None else None
+        }
         
     except Exception as e:
         st.error(f"Error calculating risk metrics: {str(e)}")
