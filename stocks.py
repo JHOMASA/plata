@@ -115,12 +115,10 @@ def get_alpha_vantage_ratios(ticker):
     
     return ratios
 
-def percentage_to_float(value):
-    """Convert percentage string to float (e.g., '15.25%' -> 0.1525)."""
+def safe_float(value):
+    """Convert value to float safely."""
     try:
-        if value and isinstance(value, str) and '%' in value:
-            return float(value.strip('%')) / 100
-        return safe_float(value)
+        return float(value) if value is not None else None
     except (ValueError, TypeError):
         return None
 
@@ -849,22 +847,6 @@ def main():
     if not ticker:
         st.error("Please enter a valid ticker symbol")
         return
-    
-    
-    
-    
-    if analysis_type == "Financial Ratios":
-        st.header("📈 Financial Ratios Analysis")
-        try:
-            ratios = get_yahoo_ratios(ticker)  # Now ticker is defined
-            if ratios:
-                display_financial_ratios(ratios, ticker)
-            else:
-                st.warning("Could not fetch financial ratios")
-        except Exception as e:
-            st.error(f"Financial ratios analysis failed: {str(e)}")
-    
-
 
     
     # Date Range Selector
