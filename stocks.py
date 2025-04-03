@@ -240,6 +240,8 @@ def predict_holt_winters(model, periods: int = 30) -> pd.Series:
 def create_lagged_features(data: pd.DataFrame, lags: int = 30) -> pd.DataFrame:
     """Create lagged features for time series forecasting"""
     df = data.copy()
+    if 'Date' in df.columns:
+        df = df.set_index('Date')
     for i in range(1, lags + 1):
         df[f'lag_{i}'] = df['Close'].shift(i)
     df.dropna(inplace=True)
@@ -249,7 +251,6 @@ def train_random_forest(data: pd.DataFrame) -> object:
     """Train Random Forest model for time series forecasting"""
     try:
         from sklearn.ensemble import RandomForestRegressor
-        from sklearn.model_selection import train_test_split
         
         # Create lagged features
         df = create_lagged_features(data)
@@ -277,8 +278,10 @@ def predict_random_forest(model, data: pd.DataFrame, periods: int = 30) -> np.nd
     try:
         # Create recursive predictions
         current_data = data.copy()
+        if 'Date' in current_data.columns:
+            current_data = current_data.set_index('Date')
         predictions = []
-        
+        last_date = current_data.index[-1]
         for _ in range(periods):
             # Create features for next prediction
             latest = pd.DataFrame(index=[current_data.index[-1] + pd.Timedelta(days=1)])
@@ -286,14 +289,11 @@ def predict_random_forest(model, data: pd.DataFrame, periods: int = 30) -> np.nd
                 latest[f'lag_{i}'] = current_data['Close'].iloc[-i]
             
             # Make prediction
-            pred = model.predict(latest)[0]
+            pred = model.predict([latest_features])[0]
             predictions.append(pred)
             
             # Update data with new prediction
-            new_row = pd.DataFrame({
-                'Close': pred,
-                'Date': latest.index[0]
-            }).set_index('Date')
+            new_row = pd.DataFrame({'Close':[pred]}, index = [last_date])
             current_data = pd.concat([current_data, new_row])
         
         return np.array(predictions)
