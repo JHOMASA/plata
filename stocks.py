@@ -170,7 +170,7 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
         if not ratios:
             st.error("No ratio data available")
             return
-            
+        chart_key = f"financial_ratios_{ticker}_{hash{frozenset(ratios.items()}"    
         # FMP field to display name mapping
         ratio_map = {
             'priceEarningsRatio': 'P/E Ratio',
@@ -181,15 +181,6 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
             'returnOnAssets': 'ROA'
         }
 
-        # Sector averages (example values - replace with real data)
-        sector_avg = {
-            'priceEarningsRatio': 15.2,
-            'priceToBookRatio': 2.8,
-            'debtEquityRatio': 0.85,
-            'currentRatio': 1.5,
-            'returnOnEquity': 0.15,
-            'returnOnAssets': 0.075
-        }
 
         # Prepare display data
         display_data = {}
@@ -244,7 +235,7 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
             title=f"{ticker} vs Sector Averages",
             yaxis_title="Value"
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key= chart_key)
         
         # Metric analysis
         st.subheader("Metric Analysis")
