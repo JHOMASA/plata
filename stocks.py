@@ -783,7 +783,7 @@ def main():
                             predictions = predict_prophet(model,30)
                             display_predictions(data, predictions, "Prophet")
                         elif model_type == "LSTM":
-                            model, scaler = train_lstm_model(d    ata)
+                            model, scaler = train_lstm_model(data)
                             predictions = predict_lstm(model, scaler, data,30)
                             display_predictions(data, predictions, "LSTM")
                         elif model_type =="ARIMA":
