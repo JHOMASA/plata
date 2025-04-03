@@ -824,9 +824,26 @@ def main():
                                 predictions = predict_holt_winters(model, 30)
                                 display_predictions(data, predictions, "Holt-Winters")
                         elif model_type == "Prophet":
-                            model = train_prophet_model(data)
-                            predictions = predict_prophet(model,30)
-                            display_predictions(data, predictions, "Prophet")
+                             try:
+                                # Debug: Show data before training
+                                st.write("Prepared Prophet data:", prepare_for_prophet(data).head())
+            
+                                # Train and predict
+                                model = train_prophet(data)
+                                predictions = predict_with_prophet(model, 30)
+            
+                                # Display results
+                                display_predictions(data, predictions, "Prophet")
+            
+                                # Optional: Show Prophet's components
+                                fig2 = model.plot_components(model.predict(
+                                    model.make_future_dataframe(periods=30)
+                                ))
+                                st.pyplot(fig2)
+            
+                           except Exception as e:
+                                st.error(f"Prophet failed: {str(e)}")
+                                st.error("Please ensure your data has a 'Date' column and enough historical points")
                         elif model_type == "LSTM":
                             model, scaler = train_lstm_model(data)
                             predictions = predict_lstm(model, scaler, data,30)
