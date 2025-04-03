@@ -862,7 +862,7 @@ def main():
             col1, col2 = st.columns(2)
     
             with col1:
-                model_type = st.selectbox(
+                model_type = st.    selectbox(
                     "Select Prediction Model",
                     ["Holt-Winters", "Prophet", "LSTM", "Random Forest", "XGBoost"]
                 )
