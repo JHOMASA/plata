@@ -165,22 +165,30 @@ def get_yahoo_ratios(ticker: str, fmp_api_key: str = None) -> Dict[str, Any]:  #
         st.error(f"Error fetching ratios: {str(e)}")
         return None
 def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
-    """Displays financial ratios with visualization."""
+    """
+    Displays financial ratios with visualization.
+    Args:
+        ratios: Dictionary of financial ratios
+        ticker: Stock ticker symbol for display purposes
+    """
     try:
         if not ratios:
             st.error("No ratio data available")
             return
-        chart_key = f"financial_ratios_{ticker}_{hash{frozenset(ratios.items()}"    
+
+        # Create a completely unique key for this chart instance
+        import time
+        chart_key = f"fin_ratios_{ticker}_{time.time_ns()}"
+
         # FMP field to display name mapping
         ratio_map = {
             'priceEarningsRatio': 'P/E Ratio',
             'priceToBookRatio': 'P/B Ratio',
             'debtEquityRatio': 'Debt/Equity',
             'currentRatio': 'Current Ratio',
-            'returnOnEquity': 'ROE',
+            'returnOnEquity': 'ROE', 
             'returnOnAssets': 'ROA'
         }
-
 
         # Prepare display data
         display_data = {}
@@ -198,30 +206,44 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
         # Create visualization
         st.subheader(f"Financial Ratios for {ticker}")
         
-        # Bar chart
-        fig = go.Figure()
+        # Create and display the plot with unique key
+        fig = create_ratios_chart(display_data, ticker)
+        st.plotly_chart(fig, use_container_width=True, key=chart_key)
         
-        # Add company bars
-        fig.add_trace(go.Bar(
-            x=list(display_data.keys()),
-            y=[float(v.strip('%')) if '%' in v else float(v) for v in display_data.values()],
-            name=ticker,
-            text=list(display_data.values()),
-            textposition='auto'
-        ))
-        
-        # Add sector average bars (only for available metrics)
-        sector_x = []
-        sector_y = []
-        for display_name in display_data.keys():
-            api_key = next(k for k, v in ratio_map.items() if v == display_name)
-            if api_key in sector_avg:
-                sector_x.append(display_name)
-                if display_name in ['ROE', 'ROA']:
-                    sector_y.append(sector_avg[api_key] * 100)
-                else:
-                    sector_y.append(sector_avg[api_key])
-        
+        # Display metric analysis
+        show_metric_analysis(display_data)
+
+    except Exception as e:
+        st.error(f"Error displaying ratios: {str(e)}")
+
+def create_ratios_chart(display_data: dict, ticker: str) -> go.Figure:
+    """Creates the ratios comparison chart"""
+    fig = go.Figure()
+    
+    # Add company bars
+    fig.add_trace(go.Bar(
+        x=list(display_data.keys()),
+        y=[float(v.strip('%')) if '%' in v else float(v) for v in display_data.values()],
+        name=ticker,
+        text=list(display_data.values()),
+        textposition='auto'
+    ))
+    
+    # Add sector averages (example values)
+    sector_avg = {
+        'P/E Ratio': 15.2,
+        'P/B Ratio': 2.8,
+        'Debt/Equity': 0.85,
+        'Current Ratio': 1.5,
+        'ROE': 15.0,  # in %
+        'ROA': 7.5     # in %
+    }
+    
+    # Only show sector averages for metrics we have data for
+    sector_x = [k for k in display_data.keys() if k in sector_avg]
+    sector_y = [sector_avg[k] * (1 if k in ['ROE', 'ROA'] else 1) for k in sector_x]
+    
+    if sector_x:
         fig.add_trace(go.Bar(
             x=sector_x,
             y=sector_y,
@@ -229,71 +251,46 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
             text=[f"{y:.1f}{'%' if x in ['ROE', 'ROA'] else ''}" for x, y in zip(sector_x, sector_y)],
             textposition='auto'
         ))
-        
-        fig.update_layout(
-            barmode='group',
-            title=f"{ticker} vs Sector Averages",
-            yaxis_title="Value"
-        )
-        st.plotly_chart(fig, use_container_width=True, key= chart_key)
-        
-        # Metric analysis
-        st.subheader("Metric Analysis")
-        
-        cols = st.columns(2)
-        with cols[0]:
-            if 'P/E Ratio' in display_data:
-                pe = float(display_data['P/E Ratio'])
-                st.metric("P/E Ratio", 
-                         display_data['P/E Ratio'],
-                         f"{'High' if pe > 20 else 'Normal' if pe > 10 else 'Low'} vs market")
-            
-            if 'Current Ratio' in display_data:
-                cr = float(display_data['Current Ratio'])
-                st.metric("Current Ratio", 
-                         display_data['Current Ratio'],
-                         "Strong" if cr > 2 else "Adequate" if cr > 1 else "Weak")
-        
-        with cols[1]:
-            if 'Debt/Equity' in display_data:
-                de = float(display_data['Debt/Equity'])
-                st.metric("Debt/Equity", 
-                         display_data['Debt/Equity'],
-                         "High" if de > 1 else "Moderate" if de > 0.5 else "Low")
-            
-            if 'ROE' in display_data:
-                roe = float(display_data['ROE'].strip('%'))
-                st.metric("Return on Equity", 
-                         display_data['ROE'],
-                         "Strong" if roe > 15 else "Average" if roe > 8 else "Weak")
+    
+    fig.update_layout(
+        barmode='group',
+        title=f"{ticker} vs Sector Averages",
+        yaxis_title="Value",
+        hovermode="x unified"
+    )
+    
+    return fig
 
-    except Exception as e:
-        st.error(f"Error displaying ratios: {str(e)}")
-
-def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
-    """Calculate market risk metrics from price data."""
-    try:
-        if data.empty or 'Close' not in data.columns:
-            return {}
+def show_metric_analysis(display_data: dict):
+    """Displays ratio analysis metrics"""
+    st.subheader("Metric Analysis")
+    
+    cols = st.columns(2)
+    with cols[0]:
+        if 'P/E Ratio' in display_data:
+            pe = float(display_data['P/E Ratio'])
+            st.metric("P/E Ratio", 
+                     display_data['P/E Ratio'],
+                     f"{'High' if pe > 20 else 'Normal' if pe > 10 else 'Low'} vs market")
         
-        ratios = {}
-        returns = np.log(1 + data['Close'].pct_change()).dropna()
+        if 'Current Ratio' in display_data:
+            cr = float(display_data['Current Ratio'])
+            st.metric("Current Ratio", 
+                     display_data['Current Ratio'],
+                     "Strong" if cr > 2 else "Adequate" if cr > 1 else "Weak")
+    
+    with cols[1]:
+        if 'Debt/Equity' in display_data:
+            de = float(display_data['Debt/Equity'])
+            st.metric("Debt/Equity", 
+                     display_data['Debt/Equity'],
+                     "High" if de > 1 else "Moderate" if de > 0.5 else "Low")
         
-        if not returns.empty:
-            ratios.update({
-                'volatility': returns.std() * np.sqrt(252),
-                'sharpeRatio': (returns.mean() / returns.std() * np.sqrt(252)) if returns.std() != 0 else None,
-            })
-        
-        rolling_max = data['Close'].cummax()
-        daily_drawdown = data['Close']/rolling_max - 1
-        ratios['maximumDrawdown'] = daily_drawdown.min()
-        
-        return {k: float(v) if v is not None else None for k, v in ratios.items()}
-        
-    except Exception as e:
-        st.error(f"Risk calculation error: {str(e)}")
-        return {}
+        if 'ROE' in display_data:
+            roe = float(display_data['ROE'].strip('%'))
+            st.metric("Return on Equity", 
+                     display_data['ROE'],
+                     "Strong" if roe > 15 else "Average" if roe > 8 else "Weak")
 def monte_carlo_simulation(data: pd.DataFrame, n_simulations: int = 1000, days: int = 180) -> dict:
     """
     Enhanced Monte Carlo simulation with moving average smoothing options
