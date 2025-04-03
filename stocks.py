@@ -242,7 +242,10 @@ def train_prophet_model(data: pd.DataFrame) -> object:
     try:
         from prophet import Prophet
         
-        df = data.reset_index()[['Date', 'Close']].rename(columns={'Date': 'ds', 'Close': 'y'})
+        # Ensure we have the right columns
+        df = data.reset_index()[['Date', 'Close']].rename(
+            columns={'Date': 'ds', 'Close': 'y'}
+        )
         model = Prophet()
         model.fit(df)
         return model
@@ -780,7 +783,7 @@ def main():
                             predictions = predict_prophet(model,30)
                             display_predictions(data, predictions, "Prophet")
                         elif model_type == "LSTM":
-                            model, scaler = train_lstm_model(data)
+                            model, scaler = train_lstm_model(d    ata)
                             predictions = predict_lstm(model, scaler, data,30)
                             display_predictions(data, predictions, "LSTM")
                         elif model_type =="ARIMA":
