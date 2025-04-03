@@ -165,27 +165,28 @@ def get_yahoo_ratios(ticker: str, fmp_api_key: str = None) -> Dict[str, Any]:  #
         st.error(f"Error fetching ratios: {str(e)}")
         return None
 def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
-    """Displays financial ratios with visualization."""
+    """Displays financial ratios with guaranteed unique chart IDs."""
     try:
         if not ratios:
             st.error("No ratio data available")
             return
             
-        # Create a completely unique key using timestamp
+        # Create a guaranteed unique key using multiple factors
         import time
-        chart_key = f"fin_ratios_{ticker}_{time.time_ns()}"
+        import random
+        chart_key = f"ratios_chart_{ticker}_{time.time_ns()}_{random.randint(0, 1000000)}"
         
-        # Define sector averages (example values - should be dynamic in production)
+        # Define sector averages (example values)
         sector_avg = {
             'priceEarningsRatio': 15.2,
             'priceToBookRatio': 2.8,
             'debtEquityRatio': 0.85,
             'currentRatio': 1.5,
-            'returnOnEquity': 0.15,  # 15%
-            'returnOnAssets': 0.075   # 7.5%
+            'returnOnEquity': 0.15,
+            'returnOnAssets': 0.075
         }
 
-        # Field mapping and display data preparation
+        # Prepare display data with proper type conversion
         ratio_map = {
             'priceEarningsRatio': 'P/E Ratio',
             'priceToBookRatio': 'P/B Ratio',
@@ -198,192 +199,116 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
         display_data = {}
         for api_key, display_name in ratio_map.items():
             if api_key in ratios and ratios[api_key] is not None:
-                if display_name in ['ROE', 'ROA']:
-                    display_data[display_name] = f"{ratios[api_key] * 100:.2f}%"
-                else:
-                    display_data[display_name] = f"{ratios[api_key]:.2f}"
+                try:
+                    if display_name in ['ROE', 'ROA']:
+                        display_data[display_name] = float(ratios[api_key]) * 100
+                    else:
+                        display_data[display_name] = float(ratios[api_key])
+                except (TypeError, ValueError):
+                    continue
 
         if not display_data:
             st.error("No valid ratio data available for display")
             return
 
-        # Create visualization
-        st.subheader(f"Financial Ratios for {ticker}")
+        # Create and display the visualization
+        show_ratios_visualization(display_data, ticker, sector_avg, ratio_map, chart_key)
         
-        # Create the figure
-        fig = go.Figure()
-        
-        # Add company bars
-        fig.add_trace(go.Bar(
-            x=list(display_data.keys()),
-            y=[float(v.strip('%')) if '%' in v else float(v) for v in display_data.values()],
-            name=ticker,
-            text=list(display_data.values()),
-            textposition='auto'
-        ))
-        
-        # Add sector average bars (only for available metrics)
-        sector_x = []
-        sector_y = []
-        for display_name in display_data.keys():
-            api_key = next(k for k, v in ratio_map.items() if v == display_name)
-            if api_key in sector_avg:
-                sector_x.append(display_name)
-                if display_name in ['ROE', 'ROA']:
-                    sector_y.append(sector_avg[api_key] * 100)
-                else:
-                    sector_y.append(sector_avg[api_key])
-        
-        if sector_x:  # Only add sector averages if we have data
-            fig.add_trace(go.Bar(
-                x=sector_x,
-                y=sector_y,
-                name='Sector Average',
-                text=[f"{y:.1f}{'%' if x in ['ROE', 'ROA'] else ''}" for x, y in zip(sector_x, sector_y)],
-                textposition='auto'
-            ))
-        
-        fig.update_layout(
-            barmode='group',
-            title=f"{ticker} vs Sector Averages",
-            yaxis_title="Value",
-            hovermode="x unified"
-        )
-        
-        # Display chart with unique key
-        st.plotly_chart(fig, use_container_width=True, key=chart_key)
-        
-        # Metric analysis
-        st.subheader("Metric Analysis")
-        
-        cols = st.columns(2)
-        with cols[0]:
-            if 'P/E Ratio' in display_data:
-                pe = float(display_data['P/E Ratio'])
-                st.metric("P/E Ratio", 
-                         display_data['P/E Ratio'],
-                         f"{'High' if pe > 20 else 'Normal' if pe > 10 else 'Low'} vs market")
-            
-            if 'Current Ratio' in display_data:
-                cr = float(display_data['Current Ratio'])
-                st.metric("Current Ratio", 
-                         display_data['Current Ratio'],
-                         "Strong" if cr > 2 else "Adequate" if cr > 1 else "Weak")
-        
-        with cols[1]:
-            if 'Debt/Equity' in display_data:
-                de = float(display_data['Debt/Equity'])
-                st.metric("Debt/Equity", 
-                         display_data['Debt/Equity'],
-                         "High" if de > 1 else "Moderate" if de > 0.5 else "Low")
-            
-            if 'ROE' in display_data:
-                roe = float(display_data['ROE'].strip('%'))
-                st.metric("Return on Equity", 
-                         display_data['ROE'],
-                         "Strong" if roe > 15 else "Average" if roe > 8 else "Weak")
+        # Show metric analysis
+        show_metric_analysis(display_data)
 
     except Exception as e:
         st.error(f"Error displaying ratios: {str(e)}")
-def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
-    """Calculate market risk metrics from price data."""
-    try:
-        if data.empty or 'Close' not in data.columns:
-            return {}
-        
-        ratios = {}
-        returns = np.log(1 + data['Close'].pct_change()).dropna()
-        
-        if not returns.empty:
-            ratios.update({
-                'volatility': returns.std() * np.sqrt(252),
-                'sharpeRatio': (returns.mean() / returns.std() * np.sqrt(252)) if returns.std() != 0 else None,
-            })
-        
-        rolling_max = data['Close'].cummax()
-        daily_drawdown = data['Close']/rolling_max - 1
-        ratios['maximumDrawdown'] = daily_drawdown.min()
-        
-        return {k: float(v) if v is not None else None for k, v in ratios.items()}
-        
-    except Exception as e:
-        st.error(f"Risk calculation error: {str(e)}")
-        return {}
 
-def create_ratios_chart(display_data: dict, ticker: str) -> go.Figure:
-    """Creates the ratios comparison chart"""
+def show_ratios_visualization(display_data: dict, ticker: str, sector_avg: dict, ratio_map: dict, chart_key: str):
+    """Creates and displays the ratios visualization with guaranteed unique key."""
     fig = go.Figure()
+    
+    # Prepare company data
+    company_values = []
+    display_names = list(display_data.keys())
+    for name in display_names:
+        if name in ['ROE', 'ROA']:
+            company_values.append(display_data[name])  # Already in percentage
+        else:
+            company_values.append(display_data[name])
     
     # Add company bars
     fig.add_trace(go.Bar(
-        x=list(display_data.keys()),
-        y=[float(v.strip('%')) if '%' in v else float(v) for v in display_data.values()],
+        x=display_names,
+        y=company_values,
         name=ticker,
-        text=list(display_data.values()),
+        text=[f"{v:.2f}%" if k in ['ROE', 'ROA'] else f"{v:.2f}" for k, v in display_data.items()],
         textposition='auto'
     ))
     
-    # Add sector averages (example values)
-    sector_avg = {
-        'P/E Ratio': 15.2,
-        'P/B Ratio': 2.8,
-        'Debt/Equity': 0.85,
-        'Current Ratio': 1.5,
-        'ROE': 15.0,  # in %
-        'ROA': 7.5     # in %
-    }
+    # Prepare sector averages
+    sector_x = []
+    sector_y = []
+    sector_text = []
+    for display_name in display_names:
+        api_key = next(k for k, v in ratio_map.items() if v == display_name)
+        if api_key in sector_avg:
+            sector_x.append(display_name)
+            if display_name in ['ROE', 'ROA']:
+                sector_y.append(sector_avg[api_key] * 100)
+                sector_text.append(f"{sector_avg[api_key] * 100:.1f}%")
+            else:
+                sector_y.append(sector_avg[api_key])
+                sector_text.append(f"{sector_avg[api_key]:.1f}")
     
-    # Only show sector averages for metrics we have data for
-    sector_x = [k for k in display_data.keys() if k in sector_avg]
-    sector_y = [sector_avg[k] * (1 if k in ['ROE', 'ROA'] else 1) for k in sector_x]
-    
+    # Add sector averages if available
     if sector_x:
         fig.add_trace(go.Bar(
             x=sector_x,
             y=sector_y,
             name='Sector Average',
-            text=[f"{y:.1f}{'%' if x in ['ROE', 'ROA'] else ''}" for x, y in zip(sector_x, sector_y)],
+            text=sector_text,
             textposition='auto'
         ))
     
+    # Update layout
     fig.update_layout(
         barmode='group',
         title=f"{ticker} vs Sector Averages",
         yaxis_title="Value",
-        hovermode="x unified"
+        hovermode="x unified",
+        uniformtext_minsize=8,
+        uniformtext_mode='hide'
     )
     
-    return fig
+    # Display with guaranteed unique key
+    st.plotly_chart(fig, use_container_width=True, key=chart_key)
 
 def show_metric_analysis(display_data: dict):
-    """Displays ratio analysis metrics"""
+    """Displays ratio analysis metrics in columns."""
     st.subheader("Metric Analysis")
     
     cols = st.columns(2)
     with cols[0]:
         if 'P/E Ratio' in display_data:
-            pe = float(display_data['P/E Ratio'])
+            pe = display_data['P/E Ratio']
             st.metric("P/E Ratio", 
-                     display_data['P/E Ratio'],
+                     f"{pe:.2f}",
                      f"{'High' if pe > 20 else 'Normal' if pe > 10 else 'Low'} vs market")
         
         if 'Current Ratio' in display_data:
-            cr = float(display_data['Current Ratio'])
+            cr = display_data['Current Ratio']
             st.metric("Current Ratio", 
-                     display_data['Current Ratio'],
+                     f"{cr:.2f}",
                      "Strong" if cr > 2 else "Adequate" if cr > 1 else "Weak")
     
     with cols[1]:
         if 'Debt/Equity' in display_data:
-            de = float(display_data['Debt/Equity'])
+            de = display_data['Debt/Equity']
             st.metric("Debt/Equity", 
-                     display_data['Debt/Equity'],
+                     f"{de:.2f}",
                      "High" if de > 1 else "Moderate" if de > 0.5 else "Low")
         
         if 'ROE' in display_data:
-            roe = float(display_data['ROE'].strip('%'))
+            roe = display_data['ROE']
             st.metric("Return on Equity", 
-                     display_data['ROE'],
+                     f"{roe:.2f}%",
                      "Strong" if roe > 15 else "Average" if roe > 8 else "Weak")
 def monte_carlo_simulation(data: pd.DataFrame, n_simulations: int = 1000, days: int = 180) -> dict:
     """
