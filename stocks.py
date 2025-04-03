@@ -172,7 +172,6 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
             return
             
         # Create a globally unique key using multiple factors
-        import uuid
         chart_key = f"ratios_{ticker}_{uuid.uuid4().hex}"
         
         # Prepare display data
@@ -259,6 +258,31 @@ def create_and_show_chart(display_data: Dict[str, float], ticker: str, chart_key
     
     # This is the critical line - using our guaranteed unique key
     st.plotly_chart(fig, use_container_width=True, key=chart_key)
+
+def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
+    """Calculate market risk metrics from price data."""
+    try:
+        if data.empty or 'Close' not in data.columns:
+            return {}
+        
+        ratios = {}
+        returns = np.log(1 + data['Close'].pct_change()).dropna()
+        
+        if not returns.empty:
+            ratios.update({
+                'volatility': returns.std() * np.sqrt(252),
+                'sharpeRatio': (returns.mean() / returns.std() * np.sqrt(252)) if returns.std() != 0 else None,
+            })
+        
+        rolling_max = data['Close'].cummax()
+        daily_drawdown = data['Close']/rolling_max - 1
+        ratios['maximumDrawdown'] = daily_drawdown.min()
+        
+        return {k: float(v) if v is not None else None for k, v in ratios.items()}
+        
+    except Exception as e:
+        st.error(f"Risk calculation error: {str(e)}")
+        return {}
 def monte_carlo_simulation(data: pd.DataFrame, n_simulations: int = 1000, days: int = 180) -> dict:
     """
     Enhanced Monte Carlo simulation with moving average smoothing options
