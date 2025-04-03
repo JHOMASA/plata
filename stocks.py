@@ -841,7 +841,7 @@ def main():
                                 ))
                                 st.pyplot(fig2)
             
-                           except Exception as e:
+                             except Exception as e:
                                 st.error(f"Prophet failed: {str(e)}")
                                 st.error("Please ensure your data has a 'Date' column and enough historical points")
                         elif model_type == "LSTM":
