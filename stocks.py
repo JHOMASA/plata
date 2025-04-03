@@ -92,22 +92,28 @@ def get_fmp_ratios(ticker: str, api_key: str) -> Dict[str, Any]:
     """Fetch ROE and ROA from Financial Modeling Prep (FMP) API."""
     try:
         url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?apikey={FMP_API_KEY}"
-        response = requests.get(url).json()
+        response = requests.get(url)
+        response = raise_for_status()
+        data = response.json()
         
-        if not response:
-            st.error("No financial data available for this ticker from FMP.")
+        if not data:
+            st.warning("No financial data available for this ticker from FMP for {ticker}.")
             return {"returnOnEquity": None, "returnOnAssets": None}
         
-        latest_data = response[0]  # Most recent fiscal year data
+        latest_data = data[0]  # Most recent fiscal year data
         
         return {
             "returnOnEquity": latest_data.get("returnOnEquity"),
             "returnOnAssets": latest_data.get("returnOnAssets")
         }
     
+    except requests.exceptions.RequestException as e:
+        st.error(f"API request failed: {str(e)}")
+    except (IndexError, KeyError) as e:
+        st.error(f"Data format error:{str(e)}")
     except Exception as e:
-        st.error(f"Error fetching FMP data: {str(e)}")
-        return {"returnOnEquity": None, "returnOnAssets": None}
+        st.error(f"Unexpected error: {str(e)"})
+    return {"returnOnEquity": None, "returnOnAssets": None}
 
 def get_yahoo_ratios(ticker: str) -> Dict[str, Any]:
     """Get financial ratios from Yahoo Finance"""
@@ -128,13 +134,14 @@ def get_yahoo_ratios(ticker: str) -> Dict[str, Any]:
             'returnOnEquity': info.get('returnOnEquity'),
             'returnOnAssets': info.get('returnOnAssets')
         }
-        
-        return ratios
-        
+        if fmp_api_key and (retios["returnOnEquity"] is None or ratios["returnOnAssets"] is None):
+            fmp_data = get_fmp_ratios(ticker, fmp_api_key)
+            ratios["returnOnEquity"] = ratios["returnOnEquity"] or fmp_data["returnOnEquity"]
+            retios["returnOnAssets"] = rations["returnOnAssets"] or fmp_data["returnOnAssets"]
+        return {k: float(v) if v is not None else None for k, v in ratios.items()}
     except Exception as e:
         st.error(f"Error fetching ratios: {str(e)}")
         return None
-
 
 
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
@@ -146,7 +153,7 @@ def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
         Dictionary of calculated ratios matching FMP's field names
     """
     try:
-        if data.empty:
+        if data.empty or "Close" not in data.columns:
             return {}
         
         ratios = {}
@@ -154,7 +161,9 @@ def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
         # Calculate volatility (annualized)
         returns = np.log(1 + data['Close'].pct_change())
         if not returns.empty:
-            ratios['volatility'] = returns.std() * np.sqrt(252)  # Annualized volatility
+            ratios['volatility'] = returns.std() * np.sqrt(252)  # Annualized volatilit,
+            ratios["sharpeRatio"] = (returns.mean() /return.std() * np.sqrt(252)) if returns.std()!=0 else None,
+            })
         
         # Calculate max drawdown
         rolling_max = data['Close'].cummax()
