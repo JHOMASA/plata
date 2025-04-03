@@ -30,7 +30,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 # Configuration
 
-FMP_API_KEY = "QDRRN1Y7K4EDJYT2"
+ALPHA_VANTAGE_API_KEY = "QDRRN1Y7K4EDJYT2"
 FINGPT_API_KEY = "AIzaTRDjNFU6WAx6FJ74zhm2vQqWyD5MsYKUcOk"  # Replace with actual key
 NEWS_API_KEY = "3f8e6bb1fb72490b835c800afcadd1aa"      # Replace with actual key
 
