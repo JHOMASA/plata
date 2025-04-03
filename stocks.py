@@ -281,19 +281,20 @@ def predict_random_forest(model, data: pd.DataFrame, periods: int = 30) -> np.nd
         if 'Date' in current_data.columns:
             current_data = current_data.set_index('Date')
         predictions = []
-        last_date = current_data.index[-1]
+        
         for _ in range(periods):
             # Create features for next prediction
-            latest = pd.DataFrame(index=[current_data.index[-1] + pd.Timedelta(days=1)])
-            for i in range(1, 31):
-                latest[f'lag_{i}'] = current_data['Close'].iloc[-i]
+            latest_features = []
+            for i in range(1, 31):  # Using same number of lags as training
+                latest_features.append(current_data['Close'].iloc[-i])
             
-            # Make prediction
+            # Reshape and predict
             pred = model.predict([latest_features])[0]
             predictions.append(pred)
             
             # Update data with new prediction
-            new_row = pd.DataFrame({'Close':[pred]}, index = [last_date])
+            new_date = current_data.index[-1] + pd.Timedelta(days=1)
+            new_row = pd.DataFrame({'Close': [pred]}, index=[new_date])
             current_data = pd.concat([current_data, new_row])
         
         return np.array(predictions)
