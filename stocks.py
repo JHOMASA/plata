@@ -359,6 +359,22 @@ def create_dynamic_chart(display_data: Dict[str, float], ticker: str,
         height=max(400, len(display_data) * 60)  # Dynamic height
     
     st.plotly_chart(fig, use_container_width=True)
+def get_alpha_vantage_ratios(ticker: str) -> Dict[str, Optional[float]]:
+    """Ensures proper decimal conversion from API"""
+    ratios = {"ROE": None, "ROA": None}
+    try:
+        # ... API call code ...
+        
+        # These values are already in percentage form from API (e.g., 15.25 means 15.25%)
+        # So we divide by 100 to convert to decimal (0.1525)
+        if "ReturnOnEquityTTM" in data:
+            ratios["ROE"] = safe_float(data["ReturnOnEquityTTM"], div_by=100)
+        if "ReturnOnAssetsTTM" in data:
+            ratios["ROA"] = safe_float(data["ReturnOnAssetsTTM"], div_by=100)
+            
+    except Exception as e:
+        st.error(f"Error: {str(e)}")
+    return ratios
 
 def show_metric_analysis(display_data: Dict[str, float], sector_avgs: Dict[str, float]):
     """Displays detailed ratio analysis with sector comparison"""
