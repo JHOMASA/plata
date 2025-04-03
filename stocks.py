@@ -280,6 +280,32 @@ def show_ratios_visualization(display_data: dict, ticker: str, sector_avg: dict,
     # Display with guaranteed unique key
     st.plotly_chart(fig, use_container_width=True, key=chart_key)
 
+def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
+    """Calculate market risk metrics from price data."""
+    try:
+        if data.empty or 'Close' not in data.columns:
+            return {}
+        
+        ratios = {}
+        returns = np.log(1 + data['Close'].pct_change()).dropna()
+        
+        if not returns.empty:
+            ratios.update({
+                'volatility': returns.std() * np.sqrt(252),
+                'sharpeRatio': (returns.mean() / returns.std() * np.sqrt(252)) if returns.std() != 0 else None,
+            })
+        
+        rolling_max = data['Close'].cummax()
+        daily_drawdown = data['Close']/rolling_max - 1
+        ratios['maximumDrawdown'] = daily_drawdown.min()
+        
+        return {k: float(v) if v is not None else None for k, v in ratios.items()}
+        
+    except Exception as e:
+        st.error(f"Risk calculation error: {str(e)}")
+        return {}
+
+
 def show_metric_analysis(display_data: dict):
     """Displays ratio analysis metrics in columns."""
     st.subheader("Metric Analysis")
