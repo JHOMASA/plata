@@ -857,52 +857,64 @@ def main():
                 st.error(f"Financial ratios analysis failed: {str(e)}")
         
         elif analysis_type == "Predictions":
-            st.header("🔮 Price Predictions")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                model_type = st.selectbox(
-                    "Select Prediction Model",
-                    ["Holt-Winters", "Prophet", "LSTM", "Random Forest", "XGBoost"]
-                )
-                
-            with col2:
+    st.header("🔮 Price Predictions")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        model_type = st.selectbox(
+            "Select Prediction Model",
+            ["Holt-Winters", "Prophet", "LSTM", "Random Forest", "XGBoost"]
+        )
+        
+    with col2:
+        if model_type == "Holt-Winters":
+            seasonality = st.radio(
+                "Seasonality",
+                ["Weekly (5)", "Monthly (21)", "Quarterly (63)"],
+                horizontal=True
+            )
+            seasonal_periods = int(seasonality.split("(")[1].replace(")", ""))
+    
+    if st.button("Generate Predictions"):
+        with st.spinner(f"Training {model_type} model..."):
+            try:
                 if model_type == "Holt-Winters":
-                    seasonality = st.radio(
-                        "Seasonality",
-                        ["Weekly (5)", "Monthly (21)", "Quarterly (63)"],
-                        horizontal=True
-                    )
-                    seasonal_periods = int(seasonality.split("(")[1].replace(")", ""))
+                    model, error = train_holt_winters(data, seasonal_periods)
+                    if model is None:
+                        st.error(error)
+                    else:
+                        predictions = predict_holt_winters(model, 30)
+                        display_predictions(data, predictions, "Holt-Winters")
+                
+                elif model_type == "Prophet":
+                    model = train_prophet_model(data)
+                    predictions = predict_prophet(model, 30)
+                    display_predictions(data, predictions, "Prophet")
+                
+                elif model_type == "Random Forest":
+                    model = train_random_forest(data)
+                    predictions = predict_random_forest(model, data, 30)  # Fixed function name
+                    display_predictions(data, predictions, "Random Forest")
+                
+                elif model_type == "LSTM":
+                    model, scaler = train_lstm_model(data)
+                    predictions = predict_lstm(model, scaler, data, 30)
+                    display_predictions(data, predictions, "LSTM")
+                
+                elif model_type == "XGBoost":
+                    model = train_xgboost_model(data)
+                    predictions = predict_xgboost(model, data, 30)
+                    display_predictions(data, predictions, "XGBoost")
             
-            if st.button("Generate Predictions"):
-                with st.spinner(f"Training {model_type} model..."):
-                    try:
-                        if model_type == "Holt-Winters":
-                            model, error = train_holt_winters(data, seasonal_periods)
-                            if model is None:
-                                st.error(error)
-                            else:
-                                predictions = predict_holt_winters(model, 30)
-                                display_predictions(data, predictions, "Holt-Winters")
-                        elif model_type == "Random Forest":
-                            model = train_random_forest(data)
-                            prediction_random_forest(model, data, 30)
-                        elif model_type == "LSTM":
-                            model, scaler = train_lstm_model(data)
-                            predictions = predict_lstm(model, scaler, data,30)
-                            display_predictions(data, predictions, "LSTM")
-                        elif model_type =="ARIMA":
-                            model = train_arima_model(data)
-                            predictions = predict_arima(model,30)
-                            display_predictions(data, predictions, "ARIMA")
-                        elif model_type == "XGBoost":
-                            model = train_xgboost_model(data)
-                            predictions = predict_xgboost(model, data, 30)
-                            display_predictions(data, predictions, "XGBoost") 
-                    except Exception as e:
-                        st.error(f"Prediction failed: {str(e)}")
+            except Exception as e:
+                st.error(f"Prediction failed: {str(e)}")
+                if "Random Forest" in str(e):
+                    st.info("Try reducing the number of lag features if you have limited historical data")
+                elif "Prophet" in str(e):
+                    st.info("Ensure your data has a proper 'Date' column and enough historical points")
+                elif "LSTM" in str(e):
+                    st.info("LSTM requires substantial data - try using at least 6 months of daily data")
     
     except Exception as e:
         st.error(f"Application error: {str(e)}")
