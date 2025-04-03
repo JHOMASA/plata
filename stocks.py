@@ -258,7 +258,7 @@ def create_and_show_chart(display_data: Dict[str, float], ticker: str, chart_key
     
     # This is the critical line - using our guaranteed unique key
     st.plotly_chart(fig, use_container_width=True, key=str(uuid.uuid4()))
-
+    
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
     """Calculate market risk metrics from price data."""
     try:
