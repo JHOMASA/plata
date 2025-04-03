@@ -25,7 +25,7 @@ from sklearn.metrics import mean_absolute_error
 from functools import lru_cache
 import requests
 from typing import  Dict, Any,Tuple
-
+from sklearn.preprocessing import MinMaxScaler
 
 
 # Configuration
@@ -257,6 +257,113 @@ def predict_prophet(model, periods: int = 30) -> pd.DataFrame:
         return forecast.tail(periods)['yhat']
     except Exception as e:
         raise Exception(f"Prophet prediction failed: {str(e)}")
+
+def train_lstm_model(data: pd.DataFrame) -> Tuple[object, object]:
+    """Basic LSTM model training"""
+    try:
+        from sklearn.preprocessing import MinMaxScaler
+        from tensorflow.keras.models import Sequential
+        from tensorflow.keras.layers import LSTM, Dense
+        
+        # Scale data
+        scaler = MinMaxScaler()
+        scaled_data = scaler.fit_transform(data[['Close']].values)
+        
+        # Prepare sequences
+        X, y = [], []
+        n_lookback = 60  # Number of days to look back
+        for i in range(n_lookback, len(scaled_data)):
+            X.append(scaled_data[i-n_lookback:i, 0])
+            y.append(scaled_data[i, 0])
+        
+        X, y = np.array(X), np.array(y)
+        X = np.reshape(X, (X.shape[0], X.shape[1], 1))
+        
+        # Build model
+        model = Sequential()
+        model.add(LSTM(50, return_sequences=True, input_shape=(X.shape[1], 1)))
+        model.add(LSTM(50))
+        model.add(Dense(1))
+        model.compile(optimizer='adam', loss='mean_squared_error')
+        model.fit(X, y, epochs=20, batch_size=32, verbose=0)
+        
+        return model, scaler
+    except Exception as e:
+        raise Exception(f"LSTM training failed: {str(e)}")
+
+def predict_lstm(model, scaler, data: pd.DataFrame, periods: int = 30) -> np.ndarray:
+    """Generate LSTM predictions"""
+    try:
+        inputs = data['Close'].values[-60:].reshape(-1,1)
+        inputs = scaler.transform(inputs)
+        
+        predictions = []
+        for _ in range(periods):
+            x_input = inputs[-60:].reshape(1,60,1)
+            pred = model.predict(x_input, verbose=0)
+            inputs = np.append(inputs, pred)
+            predictions.append(pred[0,0])
+            
+        predictions = scaler.inverse_transform(np.array(predictions).reshape(-1,1))
+        return predictions.flatten()
+    except Exception as e:
+        raise Exception(f"LSTM prediction failed: {str(e)}")
+
+def train_arima_model(data: pd.DataFrame) -> object:
+    """Train ARIMA model"""
+    try:
+        from statsmodels.tsa.arima.model import ARIMA
+        model = ARIMA(data['Close'], order=(5,1,0))
+        model_fit = model.fit()
+        return model_fit
+    except Exception as e:
+        raise Exception(f"ARIMA training failed: {str(e)}")
+
+def predict_arima(model, periods: int = 30) -> pd.Series:
+    """Generate ARIMA predictions"""
+    try:
+        predictions = model.forecast(steps=periods)
+        return predictions
+    except Exception as e:
+        raise Exception(f"ARIMA prediction failed: {str(e)}")
+
+def train_xgboost_model(data: pd.DataFrame) -> object:
+    """Train XGBoost model"""
+    try:
+        from xgboost import XGBRegressor
+        from sklearn.preprocessing import MinMaxScaler
+        
+        # Create features (using lagged values)
+        df = data.copy()
+        for i in range(1, 31):
+            df[f'lag_{i}'] = df['Close'].shift(i)
+        df.dropna(inplace=True)
+        
+        X = df.drop(columns=['Close'])
+        y = df['Close']
+        
+        model = XGBRegressor(n_estimators=100)
+        model.fit(X, y)
+        return model
+    except Exception as e:
+        raise Exception(f"XGBoost training failed: {str(e)}")
+
+def predict_xgboost(model, data: pd.DataFrame, periods: int = 30) -> np.ndarray:
+    """Generate XGBoost predictions"""
+    try:
+        # Create future dataframe with lagged values
+        future = data.copy()
+        for i in range(1, periods+1):
+            if i == 1:
+                future.loc[future.index[-1] + pd.Timedelta(days=1), 'Close'] = np.nan
+            future[f'lag_{i}'] = future['Close'].shift(i)
+        
+        # Predict
+        X_pred = future.drop(columns=['Close']).iloc[-periods:]
+        predictions = model.predict(X_pred)
+        return predictions
+    except Exception as e:
+        raise Exception(f"XGBoost prediction failed: {str(e)}")
 
 
     
@@ -666,16 +773,24 @@ def main():
                             if model is None:
                                 st.error(error)
                             else:
-                                predictions = predict_holt_winters(30)
+                                predictions = predict_holt_winters(model, 30)
                                 display_predictions(data, predictions, "Holt-Winters")
                         elif model_type == "Prophet":
                             model = train_prophet_model(data)
-                            predictions = predict_prophet(model)
+                            predictions = predict_prophet(model,30)
                             display_predictions(data, predictions, "Prophet")
                         elif model_type == "LSTM":
                             model, scaler = train_lstm_model(data)
-                            predictions = predict_lstm(model, scaler, data)
+                            predictions = predict_lstm(model, scaler, data,30)
                             display_predictions(data, predictions, "LSTM")
+                        elif model_type =="ARIMA":
+                            model = train_arima_model(data)
+                            predictions = predict_arima(model,30)
+                            display_predictions(data, predictions, "ARIMA")
+                        elif model_type == "XGBoost":
+                            model = train_xgboost_model(data)
+                            predictions = predict_xgboost(model, data, 30)
+                            display_predictions(data, predictions, "XGBoost") 
                     except Exception as e:
                         st.error(f"Prediction failed: {str(e)}")
     
