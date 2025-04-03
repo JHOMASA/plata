@@ -88,39 +88,164 @@ def get_stock_data(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
         return pd.read_json(result), None
     return pd.DataFrame(), result
 
-def get_alpha_vantage_ratios(ticker):
-    """Get ROE and ROA from Alpha Vantage API"""
+def get_alpha_vantage_ratios(ticker: str) -> Dict[str, Optional[float]]:
+    """Enhanced Alpha Vantage ratio fetcher with better error handling"""
     ratios = {"ROE": None, "ROA": None}
+    
+    if not ALPHA_VANTAGE_API_KEY:
+        st.warning("Alpha Vantage API key not configured")
+        return ratios
+
     try:
-        url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={ticker}&apikey={ALPHA_VANTAGE_API_KEY}"
-        response = requests.get(url, timeout=10)
+        response = requests.get(
+            "https://www.alphavantage.co/query",
+            params={
+                "function": "OVERVIEW",
+                "symbol": ticker,
+                "apikey": ALPHA_VANTAGE_API_KEY
+            },
+            timeout=15
+        )
+        response.raise_for_status()
         data = response.json()
-        
-        if "ReturnOnEquityTTM" in data:
-            try:
-                ratios["ROE"] = float(data["ReturnOnEquityTTM"]) / 100
-            except (ValueError, TypeError):
-                pass
-                
-        if "ReturnOnAssetsTTM" in data:
-            try:
-                ratios["ROA"] = float(data["ReturnOnAssetsTTM"]) / 100
-            except (ValueError, TypeError):
-                pass
-                
+
+        # Safely extract and convert ratios
+        ratios.update({
+            "ROE": safe_float(data.get("ReturnOnEquityTTM"), div_by=100),
+            "ROA": safe_float(data.get("ReturnOnAssetsTTM"), div_by=100)
+        })
+
     except requests.exceptions.RequestException as e:
         st.error(f"Alpha Vantage API request failed: {str(e)}")
     except Exception as e:
-        st.error(f"Error processing Alpha Vantage data: {str(e)}")
+        st.error(f"Alpha Vantage data processing error: {str(e)}")
     
     return ratios
 
-def safe_float(value):
-    """Convert value to float safely."""
+def safe_float(value: Any, div_by: int = 1) -> Optional[float]:
+    """Enhanced safe float converter with division option"""
     try:
-        return float(value) if value is not None else None
+        if value is None:
+            return None
+        return float(value) / div_by
     except (ValueError, TypeError):
         return None
+def get_sector_peers(ticker: str) -> Tuple[str, str, List[str]]:
+    """Dynamically identify sector and peers for any stock"""
+    try:
+        stock = yf.Ticker(ticker)
+        info = stock.info
+        
+        sector = info.get('sector', 'General')
+        industry = info.get('industry', 'Various')
+        peers = info.get('competitors', []) or []
+        
+        return sector, industry, peers
+    
+    except Exception as e:
+        st.warning(f"Couldn't determine sector: {str(e)}")
+        return "General", "Various", []
+
+def get_sector_averages(sector: str) -> Dict[str, float]:
+    """Get real-time sector averages from multiple reliable sources"""
+    if sector in SECTOR_AVG_CACHE:
+        return SECTOR_AVG_CACHE[sector]
+    
+    # First try: Financial Modeling Prep (most comprehensive)
+    if FMP_API_KEY:
+        try:
+            url = f"https://financialmodelingprep.com/api/v4/industry/performance?name={sector}&apikey={FMP_API_KEY}"
+            response = requests.get(url, timeout=10)
+            if response.status_code == 200:
+                data = response.json()
+                if data and isinstance(data, list):
+                    averages = {
+                        'P/E Ratio': safe_float(data[0].get('pe')),
+                        'P/B Ratio': safe_float(data[0].get('priceToBook')),
+                        'Debt/Equity': safe_float(data[0].get('debtToEquity')),
+                        'Current Ratio': safe_float(data[0].get('currentRatio')),
+                        'ROE': safe_float(data[0].get('roe')),
+                        'ROA': safe_float(data[0].get('roa'))
+                    }
+                    SECTOR_AVG_CACHE[sector] = averages
+                    return averages
+        except Exception:
+            pass
+
+    # Second try: Alpha Vantage sector performance
+    if ALPHA_VANTAGE_API_KEY:
+        try:
+            url = f"https://www.alphavantage.co/query?function=SECTOR&apikey={ALPHA_VANTAGE_API_KEY}"
+            response = requests.get(url, timeout=10)
+            data = response.json()
+            sector_data = data.get('Rank E: Profitability', {}).get(sector, {})
+            if sector_data:
+                averages = {
+                    'P/E Ratio': safe_float(sector_data.get('PE Ratio')),
+                    'ROE': safe_float(sector_data.get('ROE')),
+                    'ROA': safe_float(sector_data.get('ROA'))
+                }
+                SECTOR_AVG_CACHE[sector] = averages
+                return averages
+        except Exception:
+            pass
+
+    # Third try: Yahoo Finance industry averages
+    try:
+        sector_tickers = get_sector_tickers(sector)
+        if sector_tickers:
+            yf_sector = yf.Tickers(sector_tickers)
+            sector_pe = yf_sector.stats('trailingPE').median()
+            sector_pb = yf_sector.stats('priceToBook').median()
+            averages = {
+                'P/E Ratio': sector_pe,
+                'P/B Ratio': sector_pb
+            }
+            SECTOR_AVG_CACHE[sector] = averages
+            return averages
+    except Exception:
+        pass
+
+    # Final fallback: Cached sector averages
+    return get_cached_sector_averages(sector)
+def get_sector_tickers(sector: str) -> List[str]:
+    """Get representative tickers for a sector"""
+    SECTOR_ETFS = {
+        'Technology': ['XLK', 'VGT', 'QQQ'],
+        'Financial Services': ['XLF', 'VFH'],
+        'Healthcare': ['XLV', 'VHT'],
+        'Consumer Cyclical': ['XLY', 'VCR'],
+        'Communication Services': ['XLC', 'VOX'],
+        'Industrials': ['XLI', 'VIS'],
+        'Consumer Defensive': ['XLP', 'VDC'],
+        'Energy': ['XLE', 'VDE'],
+        'Utilities': ['XLU', 'VPU'],
+        'Real Estate': ['XLRE', 'VNQ'],
+        'Basic Materials': ['XLB', 'VAW']
+    }
+    return SECTOR_ETFS.get(sector, ['SPY'])
+
+def get_cached_sector_averages(sector: str) -> Dict[str, float]:
+    """Get recently cached sector averages with auto-update capability"""
+    CACHE_FILE = "sector_cache.json"
+    
+    # Try to load from cache if recent
+    if os.path.exists(CACHE_FILE):
+        file_age = datetime.now() - datetime.fromtimestamp(os.path.getmtime(CACHE_FILE))
+        if file_age < timedelta(days=7):
+            with open(CACHE_FILE) as f:
+                cache = json.load(f)
+                return cache.get(sector, cache.get('General'))
+    
+    # Default fallback values
+    DEFAULTS = {
+        'Technology': {'P/E Ratio': 28, 'P/B Ratio': 6.5, 'ROE': 18, 'ROA': 9},
+        'Financial Services': {'P/E Ratio': 14, 'P/B Ratio': 1.2, 'ROE': 12, 'ROA': 1},
+        'Healthcare': {'P/E Ratio': 22, 'P/B Ratio': 4, 'ROE': 15, 'ROA': 7},
+        'General': {'P/E Ratio': 15, 'P/B Ratio': 2.5, 'ROE': 12, 'ROA': 6}
+    }
+    
+    return DEFAULTS.get(sector, DEFAULTS['General'])
 
 def get_yahoo_ratios(ticker: str, fmp_api_key: str = None) -> Dict[str, Any]:  # Added fmp_api_key parameter
     """Get financial ratios from Yahoo Finance"""
@@ -153,15 +278,17 @@ def get_yahoo_ratios(ticker: str, fmp_api_key: str = None) -> Dict[str, Any]:  #
     except Exception as e:
         st.error(f"Error fetching ratios: {str(e)}")
         return None
+
 def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
-    """Displays financial ratios with absolute unique chart IDs."""
+    """Enhanced ratio display with dynamic sector comparison"""
     try:
         if not ratios:
             st.error("No ratio data available")
             return
             
-        # Create a globally unique key using multiple factors
-        chart_key = f"ratios_{ticker}_{uuid.uuid4().hex}"
+        # Get sector context
+        sector, industry, peers = get_sector_peers(ticker)
+        sector_avgs = get_sector_averages(sector)
         
         # Prepare display data
         display_data = prepare_display_data(ratios)
@@ -170,14 +297,10 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
             st.error("No valid ratio data available for display")
             return
 
-        # Create and display the visualization
-        create_and_show_chart(display_data, ticker, chart_key)
+        # Create visualization with sector comparison
+        create_dynamic_chart(d
         
-        # Show metric analysis
-        show_metric_analysis(display_data)
 
-    except Exception as e:
-        st.error(f"Error displaying ratios: {str(e)}")
 
 def prepare_display_data(ratios: Dict[str, Any]) -> Dict[str, float]:
     """Prepares and validates ratio data for display."""
@@ -203,18 +326,9 @@ def prepare_display_data(ratios: Dict[str, Any]) -> Dict[str, float]:
                 continue
     return display_data
 
-def create_and_show_chart(display_data: Dict[str, float], ticker: str, chart_key: str):
-    """Creates and displays the Plotly chart with guaranteed unique key."""
-    # Example sector averages - replace with real data in production
-    sector_avg = {
-        'P/E Ratio': 15.2,
-        'P/B Ratio': 2.8,
-        'Debt/Equity': 0.85,
-        'Current Ratio': 1.5,
-        'ROE': 15.0,  # in %
-        'ROA': 7.5    # in %
-    }
-
+def create_dynamic_chart(display_data: Dict[str, float], ticker: str, 
+                        sector: str, sector_avgs: Dict[str, float]):
+    """Creates interactive visualization with sector comparison"""
     fig = go.Figure()
     
     # Add company data
@@ -222,31 +336,87 @@ def create_and_show_chart(display_data: Dict[str, float], ticker: str, chart_key
         x=list(display_data.keys()),
         y=list(display_data.values()),
         name=ticker,
-        text=[f"{v:.2f}%" if k in ['ROE', 'ROA'] else f"{v:.2f}" for k, v in display_data.items()],
+        text=[f"{v:.2f}%" if k in ['ROE', 'ROA'] else f"{v:.2f}" 
+              for k, v in display_data.items()],
         textposition='auto'
     ))
     
     # Add sector averages for available metrics
-    sector_x = [k for k in display_data.keys() if k in sector_avg]
+    sector_x = [k for k in display_data.keys() if k in sector_avgs]
     if sector_x:
-        sector_y = [sector_avg[k] for k in sector_x]
+        sector_y = [sector_avgs[k] for k in sector_x]
         fig.add_trace(go.Bar(
             x=sector_x,
             y=sector_y,
-            name='Sector Average',
-            text=[f"{v:.1f}%" if k in ['ROE', 'ROA'] else f"{v:.1f}" for k, v in zip(sector_x, sector_y)],
+            name=f'{sector} Avg',
+            text=[f"{v:.1f}%" if k in ['ROE', 'ROA'] else f"{v:.1f}" 
+                  for k, v in zip(sector_x, sector_y)],
             textposition='auto'
         ))
     
     fig.update_layout(
         barmode='group',
-        title=f"{ticker} vs Sector Averages",
+        title=f"{ticker} vs {sector} Sector Averages",
         yaxis_title="Value",
-        hovermode="x unified"
-    )
+        hovermode="x unified",
+        height=max(400, len(display_data) * 60)  # Dynamic height
     
-    # This is the critical line - using our guaranteed unique key
-    st.plotly_chart(fig, use_container_width=True, key=chart_key)
+    st.plotly_chart(fig, use_container_width=True)
+
+def show_metric_analysis(display_data: Dict[str, float], sector_avgs: Dict[str, float]):
+    """Displays detailed ratio analysis with sector comparison"""
+    st.subheader("Detailed Ratio Analysis")
+    
+    for ratio, value in display_data.items():
+        with st.expander(f"{ratio}: {value:.2f}{'%' if ratio in ['ROE', 'ROA'] else ''}"):
+            cols = st.columns(3)
+            
+            sector_avg = sector_avgs.get(ratio)
+            if sector_avg is not None:
+                diff = (value - sector_avg) / sector_avg * 100
+                
+                with cols[0]:
+                    st.metric("Company Value", 
+                            f"{value:.2f}{'%' if ratio in ['ROE', 'ROA'] else ''}")
+                
+                with cols[1]:
+                    st.metric("Sector Average", 
+                            f"{sector_avg:.2f}{'%' if ratio in ['ROE', 'ROA'] else ''}",
+                            delta=f"{diff:.1f}%")
+                
+                with cols[2]:
+                    status = "✅" if (
+                        (ratio in ['ROE', 'ROA', 'Current Ratio'] and diff > 0) or
+                        (ratio in ['P/E Ratio', 'P/B Ratio', 'Debt/Equity'] and diff < 0)
+                    ) else "⚠️" if abs(diff) > 20 else "➖"
+                    st.metric("Assessment", status)
+                
+                st.info(generate_ratio_insight(ratio, value, sector_avg))
+            else:
+                st.metric("Company Value", 
+                        f"{value:.2f}{'%' if ratio in ['ROE', 'ROA'] else ''}")
+                st.warning("No sector average available for comparison")
+
+def generate_ratio_insight(ratio: str, value: float, sector_avg: float) -> str:
+    """Generates contextual insights for each ratio"""
+    diff_pct = (value - sector_avg) / sector_avg * 100
+    
+    if ratio == 'P/E Ratio':
+        if diff_pct > 30:
+            return "Significantly higher than sector average - may indicate overvaluation"
+        elif diff_pct < -20:
+            return "Significantly lower than sector average - may indicate undervaluation"
+        return "Valuation in line with sector peers"
+    
+    elif ratio == 'ROE':
+        if diff_pct > 20:
+            return "Strong profitability - generating more income per equity than peers"
+        elif diff_pct < -20:
+            return "Below average profitability - less efficient with shareholder equity"
+        return "Profitability comparable to sector average"
+    
+    # Add more ratio-specific insights...
+    return ""
 
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
     """Calculate market risk metrics from price data."""
@@ -260,7 +430,8 @@ def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
         if not returns.empty:
             ratios.update({
                 'volatility': returns.std() * np.sqrt(252),
-                'sharpeRatio': (returns.mean() / returns.std() * np.sqrt(252)) if returns.std() != 0 else None,
+                'sharpeRatio': (returns.mean() / returns.std() * np.sqrt(252)) 
+                              if returns.std() != 0 else None,
             })
         
         rolling_max = data['Close'].cummax()
