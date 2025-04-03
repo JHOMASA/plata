@@ -871,7 +871,7 @@ def main():
                     seasonality_choice = st.radio(
                         "Seasonality",
                         ["Weekly (5)", "Monthly (21)", "Quarterly (63)"],
-                horizontal=True
+                        horizontal=True
             )
             seasonal_periods = int(seasonality_choice.split("(")[1].replace(")", ""))
     
