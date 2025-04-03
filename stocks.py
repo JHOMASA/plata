@@ -252,9 +252,13 @@ def train_random_forest(data: pd.DataFrame) -> object:
     try:
         from sklearn.ensemble import RandomForestRegressor
         
-        # Create lagged features
+        # Create lagged features - ensure this creates 34 features
         df = create_lagged_features(data)
         
+        # Verify we have 34 features
+        if len(df.columns) != 34:
+            raise ValueError(f"Expected 34 features, got {len(df.columns)}")
+            
         # Prepare features and target
         X = df.drop(columns=['Close'])
         y = df['Close']
@@ -282,10 +286,14 @@ def predict_random_forest(model, data: pd.DataFrame, periods: int = 30) -> np.nd
             current_data = current_data.set_index('Date')
         predictions = []
         
+        # Verify we have enough history (at least 34 days)
+        if len(current_data) < 34:
+            raise ValueError("Need at least 34 days of historical data")
+        
         for _ in range(periods):
-            # Create features for next prediction
+            # Create features for next prediction - must match training (34 features)
             latest_features = []
-            for i in range(1, 31):  # Using same number of lags as training
+            for i in range(1, 35):  # Using 34 lags to match training
                 latest_features.append(current_data['Close'].iloc[-i])
             
             # Reshape and predict
