@@ -935,6 +935,8 @@ def main():
                             st.info("Try reducing the lookback window or using more data")
                         elif "XGBoost" in str(e):
                             st.info("Ensure no missing values in your historical data")
+    except Exception as e :
+        st.error(f"Application error: {str(e)}")
 if __name__ == "__main__":
     try:
         main()
