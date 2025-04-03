@@ -26,7 +26,7 @@ from functools import lru_cache
 import requests
 from typing import  Dict, Any,Tuple
 from sklearn.preprocessing import MinMaxScaler
-
+import uuid
 
 # Configuration
 
@@ -257,8 +257,8 @@ def create_and_show_chart(display_data: Dict[str, float], ticker: str, chart_key
     )
     
     # This is the critical line - using our guaranteed unique key
-    st.plotly_chart(fig, use_container_width=True, key=str(uuid.uuid4()))
-    
+    st.plotly_chart(fig, use_container_width=True, key=chart_key)
+
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
     """Calculate market risk metrics from price data."""
     try:
@@ -283,6 +283,7 @@ def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
     except Exception as e:
         st.error(f"Risk calculation error: {str(e)}")
         return {}
+
 def monte_carlo_simulation(data: pd.DataFrame, n_simulations: int = 1000, days: int = 180) -> dict:
     """
     Enhanced Monte Carlo simulation with moving average smoothing options
