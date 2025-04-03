@@ -936,4 +936,9 @@ def main():
                         elif "XGBoost" in str(e):
                             st.info("Ensure no missing values in your historical data")
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        st.error(f"Application crashed: {str(e)}")
+        import traceback 
+        st.text(traceback.format_exc())
