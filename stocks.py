@@ -88,6 +88,27 @@ def get_stock_data(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
         return pd.read_json(result), None
     return pd.DataFrame(), result
 
+def get_fmp_ratios(ticker: str, api_key: str) -> Dict[str, Any]:
+    """Fetch ROE and ROA from Financial Modeling Prep (FMP) API."""
+    try:
+        url = f"https://financialmodelingprep.com/api/v3/ratios/{ticker}?apikey={FMP_API_KEY}"
+        response = requests.get(url).json()
+        
+        if not response:
+            st.error("No financial data available for this ticker from FMP.")
+            return {"returnOnEquity": None, "returnOnAssets": None}
+        
+        latest_data = response[0]  # Most recent fiscal year data
+        
+        return {
+            "returnOnEquity": latest_data.get("returnOnEquity"),
+            "returnOnAssets": latest_data.get("returnOnAssets")
+        }
+    
+    except Exception as e:
+        st.error(f"Error fetching FMP data: {str(e)}")
+        return {"returnOnEquity": None, "returnOnAssets": None}
+
 def get_yahoo_ratios(ticker: str) -> Dict[str, Any]:
     """Get financial ratios from Yahoo Finance"""
     try:
@@ -113,6 +134,7 @@ def get_yahoo_ratios(ticker: str) -> Dict[str, Any]:
     except Exception as e:
         st.error(f"Error fetching ratios: {str(e)}")
         return None
+
 
 
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
