@@ -487,7 +487,7 @@ def display_stock_analysis(stock_data, ticker):
         fig1.add_trace(go.Scatter(x=stock_data.index, y=stock_data['Close'], name='Close Price'))
         fig1.update_layout(title=f"{ticker} Price History", xaxis_title="Date", yaxis_title="Price")
         st.plotly_chart(fig1, use_container_width=True)
-        
+      
     with col2:
         # Volume Analysis
         fig2 = go.Figure()
@@ -866,7 +866,7 @@ def main():
                     "Select Prediction Model",
                     ["Holt-Winters", "Prophet", "LSTM", "Random Forest", "XGBoost"]
                 )
-        
+            seasonal_periods = 5
             with col2:
                 if model_type == "Holt-Winters":
                     seasonality = st.radio(
