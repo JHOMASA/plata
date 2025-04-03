@@ -88,29 +88,30 @@ def get_stock_data(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
         return pd.read_json(result), None
     return pd.DataFrame(), result
 
-def get_alpha_vantage_ratios(ticker: str) -> Dict[str, Any]:
-    """Fetch financial ratios from Alpha Vantage API."""
+def get_alpha_vantage_ratios(ticker):
+    """Get ROE and ROA from Alpha Vantage API"""
+    ratios = {"ROE": None, "ROA": None}
     try:
         url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={ticker}&apikey={ALPHA_VANTAGE_API_KEY}"
         response = requests.get(url, timeout=10)
-        response.raise_for_status()
         data = response.json()
         
-        if not data:
-            st.warning(f"No financial data available from Alpha Vantage for {ticker}")
-            return None
-            
-        # Extract and convert relevant ratios
-        ratios = {
-            'priceEarningsRatio': safe_float(data.get('PERatio')),
-            'priceToBookRatio': safe_float(data.get('PriceToBookRatio')),
-            'debtEquityRatio': safe_float(data.get('DebtToEquity')),
-            'currentRatio': safe_float(data.get('CurrentRatio')),
-            'returnOnEquity': percentage_to_float(data.get('ReturnOnEquityTTM')),
-            'returnOnAssets': percentage_to_float(data.get('ReturnOnAssetsTTM'))
-        }
-        
-        return ratios
+        if "ReturnOnEquityTTM" in data:
+            try:
+                ratios["ROE"] = float(data["ReturnOnEquityTTM"]) / 100
+            except (ValueError, TypeError):
+                pass
+                
+        if "ReturnOnAssetsTTM" in data:
+            try:
+                ratios["ROA"] = float(data["ReturnOnAssetsTTM"]) / 100
+            except (ValueError, TypeError):
+                pass
+                
+    except Exception as e:
+        print(f"Alpha Vantage Error: {str(e)}")
+    
+    return ratios
         
     except requests.exceptions.RequestException as e:
         st.error(f"Alpha Vantage API request failed: {str(e)}")
