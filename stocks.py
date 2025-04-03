@@ -165,14 +165,15 @@ def get_yahoo_ratios(ticker: str, fmp_api_key: str = None) -> Dict[str, Any]:  #
         st.error(f"Error fetching ratios: {str(e)}")
         return None
 def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
-    """Displays financial ratios with guaranteed unique chart IDs."""
+    """Displays financial ratios with absolute unique chart IDs."""
     try:
         if not ratios:
             st.error("No ratio data available")
             return
             
-        # Create a bulletproof unique key using multiple unique factors
-        chart_key = f"ratios_{ticker}_{time.time_ns()}_{random.getrandbits(64)}"
+        # Create a globally unique key using multiple factors
+        import uuid
+        chart_key = f"ratios_{ticker}_{uuid.uuid4().hex}"
         
         # Prepare display data
         display_data = prepare_display_data(ratios)
@@ -258,63 +259,6 @@ def create_and_show_chart(display_data: Dict[str, float], ticker: str, chart_key
     
     # This is the critical line - using our guaranteed unique key
     st.plotly_chart(fig, use_container_width=True, key=chart_key)
-    
-def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
-    """Calculate market risk metrics from price data."""
-    try:
-        if data.empty or 'Close' not in data.columns:
-            return {}
-        
-        ratios = {}
-        returns = np.log(1 + data['Close'].pct_change()).dropna()
-        
-        if not returns.empty:
-            ratios.update({
-                'volatility': returns.std() * np.sqrt(252),
-                'sharpeRatio': (returns.mean() / returns.std() * np.sqrt(252)) if returns.std() != 0 else None,
-            })
-        
-        rolling_max = data['Close'].cummax()
-        daily_drawdown = data['Close']/rolling_max - 1
-        ratios['maximumDrawdown'] = daily_drawdown.min()
-        
-        return {k: float(v) if v is not None else None for k, v in ratios.items()}
-        
-    except Exception as e:
-        st.error(f"Risk calculation error: {str(e)}")
-        return {}
-
-
-def show_metric_analysis(display_data: dict):
-    """Displays ratio analysis metrics in columns."""
-    st.subheader("Metric Analysis")
-    
-    cols = st.columns(2)
-    with cols[0]:
-        if 'P/E Ratio' in display_data:
-            pe = display_data['P/E Ratio']
-            st.metric("P/E Ratio", 
-                     f"{pe:.2f}",
-                     f"{'High' if pe > 20 else 'Normal' if pe > 10 else 'Low'} vs market")
-        
-        if 'Current Ratio' in display_data:
-            cr = display_data['Current Ratio']
-            st.metric("Current Ratio", 
-                     f"{cr:.2f}",
-                     "Strong" if cr > 2 else "Adequate" if cr > 1 else "Weak")
-    
-    with cols[1]:
-        if 'Debt/Equity' in display_data:
-            de = display_data['Debt/Equity']
-            st.metric("Debt/Equity", 
-                     f"{de:.2f}",
-                     "High" if de > 1 else "Moderate" if de > 0.5 else "Low")
-        
-        if 'ROE' in display_data:
-            roe = display_data['ROE']
-            st.metric("Return on Equity", 
-                     f"{roe:.2f}%",
-                     "Strong" if roe > 15 else "Average" if roe > 8 else "Weak")
 def monte_carlo_simulation(data: pd.DataFrame, n_simulations: int = 1000, days: int = 180) -> dict:
     """
     Enhanced Monte Carlo simulation with moving average smoothing options
