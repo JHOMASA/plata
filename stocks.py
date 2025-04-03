@@ -171,48 +171,18 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
             st.error("No ratio data available")
             return
             
-        # Create a guaranteed unique key using multiple factors
-        import time
-        import random
-        chart_key = f"ratios_chart_{ticker}_{time.time_ns()}_{random.randint(0, 1000000)}"
+        # Create a bulletproof unique key using multiple unique factors
+        chart_key = f"ratios_{ticker}_{time.time_ns()}_{random.getrandbits(64)}"
         
-        # Define sector averages (example values)
-        sector_avg = {
-            'priceEarningsRatio': 15.2,
-            'priceToBookRatio': 2.8,
-            'debtEquityRatio': 0.85,
-            'currentRatio': 1.5,
-            'returnOnEquity': 0.15,
-            'returnOnAssets': 0.075
-        }
-
-        # Prepare display data with proper type conversion
-        ratio_map = {
-            'priceEarningsRatio': 'P/E Ratio',
-            'priceToBookRatio': 'P/B Ratio',
-            'debtEquityRatio': 'Debt/Equity',
-            'currentRatio': 'Current Ratio',
-            'returnOnEquity': 'ROE',
-            'returnOnAssets': 'ROA'
-        }
-
-        display_data = {}
-        for api_key, display_name in ratio_map.items():
-            if api_key in ratios and ratios[api_key] is not None:
-                try:
-                    if display_name in ['ROE', 'ROA']:
-                        display_data[display_name] = float(ratios[api_key]) * 100
-                    else:
-                        display_data[display_name] = float(ratios[api_key])
-                except (TypeError, ValueError):
-                    continue
-
+        # Prepare display data
+        display_data = prepare_display_data(ratios)
+        
         if not display_data:
             st.error("No valid ratio data available for display")
             return
 
         # Create and display the visualization
-        show_ratios_visualization(display_data, ticker, sector_avg, ratio_map, chart_key)
+        create_and_show_chart(display_data, ticker, chart_key)
         
         # Show metric analysis
         show_metric_analysis(display_data)
@@ -220,66 +190,75 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
     except Exception as e:
         st.error(f"Error displaying ratios: {str(e)}")
 
-def show_ratios_visualization(display_data: dict, ticker: str, sector_avg: dict, ratio_map: dict, chart_key: str):
-    """Creates and displays the ratios visualization with guaranteed unique key."""
+def prepare_display_data(ratios: Dict[str, Any]) -> Dict[str, float]:
+    """Prepares and validates ratio data for display."""
+    ratio_map = {
+        'priceEarningsRatio': 'P/E Ratio',
+        'priceToBookRatio': 'P/B Ratio',
+        'debtEquityRatio': 'Debt/Equity',
+        'currentRatio': 'Current Ratio',
+        'returnOnEquity': 'ROE',
+        'returnOnAssets': 'ROA'
+    }
+
+    display_data = {}
+    for api_key, display_name in ratio_map.items():
+        if api_key in ratios and ratios[api_key] is not None:
+            try:
+                value = float(ratios[api_key])
+                if display_name in ['ROE', 'ROA']:
+                    display_data[display_name] = value * 100  # Convert to percentage
+                else:
+                    display_data[display_name] = value
+            except (TypeError, ValueError):
+                continue
+    return display_data
+
+def create_and_show_chart(display_data: Dict[str, float], ticker: str, chart_key: str):
+    """Creates and displays the Plotly chart with guaranteed unique key."""
+    # Example sector averages - replace with real data in production
+    sector_avg = {
+        'P/E Ratio': 15.2,
+        'P/B Ratio': 2.8,
+        'Debt/Equity': 0.85,
+        'Current Ratio': 1.5,
+        'ROE': 15.0,  # in %
+        'ROA': 7.5    # in %
+    }
+
     fig = go.Figure()
     
-    # Prepare company data
-    company_values = []
-    display_names = list(display_data.keys())
-    for name in display_names:
-        if name in ['ROE', 'ROA']:
-            company_values.append(display_data[name])  # Already in percentage
-        else:
-            company_values.append(display_data[name])
-    
-    # Add company bars
+    # Add company data
     fig.add_trace(go.Bar(
-        x=display_names,
-        y=company_values,
+        x=list(display_data.keys()),
+        y=list(display_data.values()),
         name=ticker,
         text=[f"{v:.2f}%" if k in ['ROE', 'ROA'] else f"{v:.2f}" for k, v in display_data.items()],
         textposition='auto'
     ))
     
-    # Prepare sector averages
-    sector_x = []
-    sector_y = []
-    sector_text = []
-    for display_name in display_names:
-        api_key = next(k for k, v in ratio_map.items() if v == display_name)
-        if api_key in sector_avg:
-            sector_x.append(display_name)
-            if display_name in ['ROE', 'ROA']:
-                sector_y.append(sector_avg[api_key] * 100)
-                sector_text.append(f"{sector_avg[api_key] * 100:.1f}%")
-            else:
-                sector_y.append(sector_avg[api_key])
-                sector_text.append(f"{sector_avg[api_key]:.1f}")
-    
-    # Add sector averages if available
+    # Add sector averages for available metrics
+    sector_x = [k for k in display_data.keys() if k in sector_avg]
     if sector_x:
+        sector_y = [sector_avg[k] for k in sector_x]
         fig.add_trace(go.Bar(
             x=sector_x,
             y=sector_y,
             name='Sector Average',
-            text=sector_text,
+            text=[f"{v:.1f}%" if k in ['ROE', 'ROA'] else f"{v:.1f}" for k, v in zip(sector_x, sector_y)],
             textposition='auto'
         ))
     
-    # Update layout
     fig.update_layout(
         barmode='group',
         title=f"{ticker} vs Sector Averages",
         yaxis_title="Value",
-        hovermode="x unified",
-        uniformtext_minsize=8,
-        uniformtext_mode='hide'
+        hovermode="x unified"
     )
     
-    # Display with guaranteed unique key
+    # This is the critical line - using our guaranteed unique key
     st.plotly_chart(fig, use_container_width=True, key=chart_key)
-
+    
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
     """Calculate market risk metrics from price data."""
     try:
