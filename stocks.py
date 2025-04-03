@@ -866,79 +866,74 @@ def main():
                     "Select Prediction Model",
                     ["Holt-Winters", "Prophet", "LSTM", "Random Forest", "XGBoost"]
                 )
-            seasonal_periods = 5
-            with col2:
-                if model_type == "Holt-Winters":
-                    seasonality = st.radio(
+            if model_type == "Holt-Winters":
+                with col2:
+                    seasonality_choice = st.radio(
                         "Seasonality",
                         ["Weekly (5)", "Monthly (21)", "Quarterly (63)"],
-                        horizontal=True
-                    )
-                seasonal_periods = int(seasonality.split("(")[1].replace(")", ""))
+                horizontal=True
+            )
+            seasonal_periods = int(seasonality_choice.split("(")[1].replace(")", ""))
     
-            if st.button("Generate Predictions"):
-                with st.spinner(f"Training {model_type} model..."):
-                    try:
-                        if model_type == "Holt-Winters":
-                            model, error = train_holt_winters(data, seasonal_periods)
-                            if model is None:
-                                st.error(error)
-                            else:
-                                predictions = predict_holt_winters(model, 30)
-                                display_predictions(data, predictions, "Holt-Winters")
-                
-                        elif model_type == "Prophet":
-                            model = train_prophet_model(data)
-                            predictions = predict_prophet(model, 30)
-                            display_predictions(data, predictions, "Prophet")
-                
-                        elif model_type == "Random Forest":
-                            model = train_random_forest(data)
-                            predictions = predict_random_forest(model, data, 30)  # Fixed function name
-                            display_predictions(data, predictions, "Random Forest")
-
-                            # Show feature importance
-                            try:
-                                importances = model.feature_importances_
-                                features = [f"Day-{i}" for i in range(1, 31)]
-                                fig = go.Figure([go.Bar(
-                                    x=features, 
-                                    y=importances,
-                                    marker_color='#636EFA'
-                                )])
-                                fig.update_layout(
-                                    title="Feature Importance (Which Past Days Matter Most)",
-                                    xaxis_title="Days Back",
-                                    yaxis_title="Importance Score",
-                                    hovermode="x"
-                                )    
-                                st.plotly_chart(fig)
-                            except Exception as e:
-                                st.warning(f"Couldn't generate feature importance: {str(e)}")
-                
-                        elif model_type == "LSTM":
-                            model, scaler = train_lstm_model(data)
-                            predictions = predict_lstm(model, scaler, data, 30)
-                            display_predictions(data, predictions, "LSTM")
-                
-                        elif model_type == "XGBoost":
-                            model = train_xgboost_model(data)
-                            predictions = predict_xgboost(model, data, 30)
-                            display_predictions(data, predictions, "XGBoost")
+    if st.button("Generate Predictions"):
+        with st.spinner(f"Training {model_type} model..."):
+            try:
+                if model_type == "Holt-Winters":
+                    model, error = train_holt_winters(data, seasonal_periods)
+                    if model is None:
+                        st.error(error)
+                    else:
+                        predictions = predict_holt_winters(model, 30)
+                        display_predictions(data, predictions, "Holt-Winters")
             
-                    except Exception as e:
-                        st.error(f"Prediction failed: {str(e)}")
-                        if "Random Forest" in str(e):
-                            st.info("Try with at least 60 days of historical data")
-                        elif "Prophet" in str(e):
-                            st.info("Check your date format (YYYY-MM-DD required)")
-                        elif "LSTM" in str(e):
-                            st.info("Try reducing the lookback window or using more data")
-                        elif "XGBoost" in str(e):
-                            st.info("Ensure no missing values in your historical data")
-    
-    except Exception as e:
-        st.error(f"Application error: {str(e)}")
+                elif model_type == "Prophet":
+                    model = train_prophet(data)
+                    predictions = predict_with_prophet(model, 30)
+                    display_predictions(data, predictions, "Prophet")
+            
+                elif model_type == "Random Forest":
+                    model = train_random_forest(data)
+                    predictions = predict_random_forest(model, data, 30)
+                    display_predictions(data, predictions, "Random Forest")
 
+                    # Show feature importance
+                    try:
+                        importances = model.feature_importances_
+                        features = [f"Day-{i}" for i in range(1, 31)]
+                        fig = go.Figure([go.Bar(
+                            x=features, 
+                            y=importances,
+                            marker_color='#636EFA'
+                        )])
+                        fig.update_layout(
+                            title="Feature Importance (Which Past Days Matter Most)",
+                            xaxis_title="Days Back",
+                            yaxis_title="Importance Score",
+                            hovermode="x"
+                        )    
+                        st.plotly_chart(fig)
+                    except Exception as e:
+                        st.warning(f"Couldn't generate feature importance: {str(e)}")
+            
+                elif model_type == "LSTM":
+                    model, scaler = train_lstm_model(data)
+                    predictions = predict_lstm(model, scaler, data, 30)
+                    display_predictions(data, predictions, "LSTM")
+            
+                elif model_type == "XGBoost":
+                    model = train_xgboost_model(data)
+                    predictions = predict_xgboost(model, data, 30)
+                    display_predictions(data, predictions, "XGBoost")
+        
+            except Exception as e:
+                st.error(f"Prediction failed: {str(e)}")
+                if "Random Forest" in str(e):
+                    st.info("Try with at least 60 days of historical data")
+                elif "Prophet" in str(e):
+                    st.info("Check your date format (YYYY-MM-DD required)")
+                elif "LSTM" in str(e):
+                    st.info("Try reducing the lookback window or using more data")
+                elif "XGBoost" in str(e):
+                    st.info("Ensure no missing values in your historical data")
 if __name__ == "__main__":
     main()
