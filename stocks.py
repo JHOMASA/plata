@@ -237,75 +237,69 @@ def predict_holt_winters(model, periods: int = 30) -> pd.Series:
     except Exception as e:
         raise Exception(f"Holt-Winters prediction failed: {str(e)}")
 
-def prepare_for_prophet(data: pd.DataFrame) -> pd.DataFrame:
-    """Transforms your stock data into Prophet-compatible format"""
-    # Create a clean copy to avoid modifying original data
+def create_lagged_features(data: pd.DataFrame, lags: int = 30) -> pd.DataFrame:
+    """Create lagged features for time series forecasting"""
     df = data.copy()
-    
-    # Ensure we have a Date column (convert index if needed)
-    if 'Date' not in df.columns:
-        df = df.reset_index()
-    
-    # Select only the columns we need and rename them
-    prophet_df = df[['Date', 'Close']].rename(
-        columns={'Date': 'ds', 'Close': 'y'}
-    )
-    
-    # Convert to proper datetime format
-    prophet_df['ds'] = pd.to_datetime(prophet_df['ds'])
-    
-    # Remove any missing values
-    prophet_df = prophet_df.dropna()
-    
-    return prophet_df
+    for i in range(1, lags + 1):
+        df[f'lag_{i}'] = df['Close'].shift(i)
+    df.dropna(inplace=True)
+    return df
 
-def train_prophet(data: pd.DataFrame) -> object:
-    """Trains Prophet model with robust error handling"""
+def train_random_forest(data: pd.DataFrame) -> object:
+    """Train Random Forest model for time series forecasting"""
     try:
-        from prophet import Prophet
+        from sklearn.ensemble import RandomForestRegressor
+        from sklearn.model_selection import train_test_split
         
-        # Prepare the data
-        df = prepare_for_prophet(data)
+        # Create lagged features
+        df = create_lagged_features(data)
         
-        # Validate data
-        if len(df) < 2:
-            raise ValueError("Not enough data points (need at least 2)")
-        if not all(col in df.columns for col in ['ds', 'y']):
-            raise ValueError("Data must contain 'ds' and 'y' columns")
+        # Prepare features and target
+        X = df.drop(columns=['Close'])
+        y = df['Close']
         
-        # Initialize model with reasonable defaults for stocks
-        model = Prophet(
-            daily_seasonality=False,  # Typically not useful for stocks
-            weekly_seasonality=True,
-            yearly_seasonality=True,
-            changepoint_prior_scale=0.05  # Less sensitive to sudden changes
+        # Train model
+        model = RandomForestRegressor(
+            n_estimators=100,
+            max_depth=10,
+            random_state=42,
+            n_jobs=-1
         )
-        
-        # Fit the model
-        model.fit(df)
+        model.fit(X, y)
         
         return model
         
     except Exception as e:
-        raise Exception(f"Prophet training failed: {str(e)}")
+        raise Exception(f"Random Forest training failed: {str(e)}")
 
-def predict_with_prophet(model, periods: int = 30) -> pd.Series:
-    """Generates predictions from trained Prophet model"""
+def predict_random_forest(model, data: pd.DataFrame, periods: int = 30) -> np.ndarray:
+    """Generate predictions using Random Forest"""
     try:
-        # Create future dates
-        future = model.make_future_dataframe(periods=periods, freq='D')
+        # Create recursive predictions
+        current_data = data.copy()
+        predictions = []
         
-        # Generate forecast
-        forecast = model.predict(future)
+        for _ in range(periods):
+            # Create features for next prediction
+            latest = pd.DataFrame(index=[current_data.index[-1] + pd.Timedelta(days=1)])
+            for i in range(1, 31):
+                latest[f'lag_{i}'] = current_data['Close'].iloc[-i]
+            
+            # Make prediction
+            pred = model.predict(latest)[0]
+            predictions.append(pred)
+            
+            # Update data with new prediction
+            new_row = pd.DataFrame({
+                'Close': pred,
+                'Date': latest.index[0]
+            }).set_index('Date')
+            current_data = pd.concat([current_data, new_row])
         
-        # Return only the predictions (not the training data)
-        predictions = forecast.tail(periods).set_index('ds')['yhat']
-        
-        return predictions
+        return np.array(predictions)
         
     except Exception as e:
-        raise Exception(f"Prophet prediction failed: {str(e)}")
-
+        raise Exception(f"Random Forest prediction failed: {str(e)}")
 def train_lstm_model(data: pd.DataFrame) -> Tuple[object, object]:
     """Basic LSTM model training"""
     try:
@@ -801,7 +795,7 @@ def main():
             with col1:
                 model_type = st.selectbox(
                     "Select Prediction Model",
-                    ["Holt-Winters", "Prophet", "LSTM", "ARIMA", "XGBoost"]
+                    ["Holt-Winters", "Prophet", "LSTM", "Random Forest", "XGBoost"]
                 )
                 
             with col2:
@@ -823,27 +817,9 @@ def main():
                             else:
                                 predictions = predict_holt_winters(model, 30)
                                 display_predictions(data, predictions, "Holt-Winters")
-                        elif model_type == "Prophet":
-                             try:
-                                # Debug: Show data before training
-                                st.write("Prepared Prophet data:", prepare_for_prophet(data).head())
-            
-                                # Train and predict
-                                model = train_prophet(data)
-                                predictions = predict_with_prophet(model, 30)
-            
-                                # Display results
-                                display_predictions(data, predictions, "Prophet")
-            
-                                # Optional: Show Prophet's components
-                                fig2 = model.plot_components(model.predict(
-                                    model.make_future_dataframe(periods=30)
-                                ))
-                                st.pyplot(fig2)
-            
-                             except Exception as e:
-                                st.error(f"Prophet failed: {str(e)}")
-                                st.error("Please ensure your data has a 'Date' column and enough historical points")
+                        elif model_type == "Random Forest":
+                            model = train_random_forest(data)
+                            prediction_random_forest(model, data, 30)
                         elif model_type == "LSTM":
                             model, scaler = train_lstm_model(data)
                             predictions = predict_lstm(model, scaler, data,30)
