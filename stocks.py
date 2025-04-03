@@ -821,7 +821,7 @@ def main():
             
                         elif model_type == "Arima":
                             model = train_arima(data)
-                            predictions = predict_with_prophet(model, 30)
+                            predictions = predict_arima(model, 30)
                             display_predictions(data, predictions, "Arima")
             
                         elif model_type == "Random Forest":
