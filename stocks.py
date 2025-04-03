@@ -237,14 +237,20 @@ def predict_holt_winters(model, periods: int = 30) -> pd.Series:
     except Exception as e:
         raise Exception(f"Holt-Winters prediction failed: {str(e)}")
 
-def create_lagged_features(data: pd.DataFrame, lags: int = 30) -> pd.DataFrame:
-    """Create lagged features for time series forecasting"""
+def create_lagged_features(data: pd.DataFrame, lags: int = 34) -> pd.DataFrame:
+    """Create exactly 34 lagged features (including the Close price)"""
     df = data.copy()
     if 'Date' in df.columns:
         df = df.set_index('Date')
+    
+    # Create exactly 34 lag features (lag_1 to lag_34)
     for i in range(1, lags + 1):
         df[f'lag_{i}'] = df['Close'].shift(i)
+    
+    # Keep only Close price and the lag features
+    df = df[['Close'] + [f'lag_{i}' for i in range(1, lags + 1)]]
     df.dropna(inplace=True)
+    
     return df
 
 def train_random_forest(data: pd.DataFrame) -> object:
