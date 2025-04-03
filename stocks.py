@@ -108,22 +108,12 @@ def get_alpha_vantage_ratios(ticker):
             except (ValueError, TypeError):
                 pass
                 
-    except Exception as e:
-        print(f"Alpha Vantage Error: {str(e)}")
-    
-    return ratios
-        
     except requests.exceptions.RequestException as e:
         st.error(f"Alpha Vantage API request failed: {str(e)}")
     except Exception as e:
         st.error(f"Error processing Alpha Vantage data: {str(e)}")
-    return None
-def safe_float(value):
-    """Convert value to float safely."""
-    try:
-        return float(value) if value is not None else None
-    except (ValueError, TypeError):
-        return None
+    
+    return ratios
 
 def percentage_to_float(value):
     """Convert percentage string to float (e.g., '15.25%' -> 0.1525)."""
