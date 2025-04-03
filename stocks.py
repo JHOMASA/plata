@@ -351,74 +351,6 @@ def predict_lstm(model, scaler, data: pd.DataFrame, periods: int = 30) -> np.nda
     except Exception as e:
         raise Exception(f"LSTM prediction failed: {str(e)}")
 
-def prepare_for_prophet(data: pd.DataFrame) -> pd.DataFrame:
-    """Transforms your stock data into Prophet-compatible format"""
-    # Create a clean copy to avoid modifying original data
-    df = data.copy()
-    
-    # Ensure we have a Date column (convert index if needed)
-    if 'Date' not in df.columns:
-        df = df.reset_index()
-    
-    # Select only the columns we need and rename them
-    prophet_df = df[['Date', 'Close']].rename(
-        columns={'Date': 'ds', 'Close': 'y'}
-    )
-    
-    # Convert to proper datetime format
-    prophet_df['ds'] = pd.to_datetime(prophet_df['ds'])
-    
-    # Remove any missing values
-    prophet_df = prophet_df.dropna()
-    
-    return prophet_df
-
-def train_prophet(data: pd.DataFrame) -> object:
-    """Trains Prophet model with robust error handling"""
-    try:
-        from prophet import Prophet
-        
-        # Prepare the data
-        df = prepare_for_prophet(data)
-        
-        # Validate data
-        if len(df) < 2:
-            raise ValueError("Not enough data points (need at least 2)")
-        if not all(col in df.columns for col in ['ds', 'y']):
-            raise ValueError("Data must contain 'ds' and 'y' columns")
-        
-        # Initialize model with reasonable defaults for stocks
-        model = Prophet(
-            daily_seasonality=False,  # Typically not useful for stocks
-            weekly_seasonality=True,
-            yearly_seasonality=True,
-            changepoint_prior_scale=0.05  # Less sensitive to sudden changes
-        )
-        
-        # Fit the model
-        model.fit(df)
-        
-        return model
-        
-    except Exception as e:
-        raise Exception(f"Prophet training failed: {str(e)}")
-
-def predict_with_prophet(model, periods: int = 30) -> pd.Series:
-    """Generates predictions from trained Prophet model"""
-    try:
-        # Create future dates
-        future = model.make_future_dataframe(periods=periods, freq='D')
-        
-        # Generate forecast
-        forecast = model.predict(future)
-        
-        # Return only the predictions (not the training data)
-        predictions = forecast.tail(periods).set_index('ds')['yhat']
-        
-        return predictions
-        
-    except Exception as e:
-        raise Exception(f"Prophet prediction failed: {str(e)}")
 
 def train_arima_model(data: pd.DataFrame) -> object:
     """Train ARIMA model"""
@@ -864,7 +796,7 @@ def main():
             with col1:
                 model_type = st.    selectbox(
                     "Select Prediction Model",
-                    ["Holt-Winters", "Prophet", "LSTM", "Random Forest", "XGBoost"]
+                    ["Holt-Winters", "Arima", "LSTM", "Random Forest", "XGBoost"]
                 )
             seasonal_periods = 5
             if model_type == "Holt-Winters":
@@ -887,7 +819,7 @@ def main():
                                 predictions = predict_holt_winters(model, 30)
                                 display_predictions(data, predictions, "Holt-Winters")
             
-                        elif model_type == "Prophet":
+                        elif model_type == "Arima":
                             model = train_prophet(data)
                             predictions = predict_with_prophet(model, 30)
                             display_predictions(data, predictions, "Prophet")
