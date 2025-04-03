@@ -237,27 +237,60 @@ def predict_holt_winters(model, periods: int = 30) -> pd.Series:
     except Exception as e:
         raise Exception(f"Holt-Winters prediction failed: {str(e)}")
 
+def prepare_prophet_data(data: pd.DataFrame) -> pd.DataFrame:
+    """Prepares data for Prophet model"""
+    # Make sure we have a Date column and Close column
+    df = data.reset_index()  # This ensures Date becomes a column if it was the index
+    df = df[['Date', 'Close']].copy()
+    
+    # Rename columns for Prophet
+    df = df.rename(columns={'Date': 'ds', 'Close': 'y'})
+    
+    # Convert to datetime if not already
+    df['ds'] = pd.to_datetime(df['ds'])
+    
+    # Drop any NA values
+    df = df.dropna()
+    
+    return df
+
 def train_prophet_model(data: pd.DataFrame) -> object:
-    """Train Facebook Prophet model"""
+    """Train Facebook Prophet model with proper error handling"""
     try:
         from prophet import Prophet
         
-        # Ensure we have the right columns
-        df = data.reset_index()[['Date', 'Close']].rename(
-            columns={'Date': 'ds', 'Close': 'y'}
+        # Prepare the data
+        df = prepare_prophet_data(data)
+        
+        # Validate we have the required columns
+        if not all(col in df.columns for col in ['ds', 'y']):
+            raise ValueError("DataFrame must contain 'ds' and 'y' columns")
+            
+        # Initialize and fit model
+        model = Prophet(
+            daily_seasonality=False,
+            weekly_seasonality=True,
+            yearly_seasonality=True
         )
-        model = Prophet()
         model.fit(df)
+        
         return model
+        
     except Exception as e:
         raise Exception(f"Prophet training failed: {str(e)}")
 
 def predict_prophet(model, periods: int = 30) -> pd.DataFrame:
     """Generate predictions using Prophet model"""
     try:
-        future = model.make_future_dataframe(periods=periods)
+        # Create future dataframe
+        future = model.make_future_dataframe(periods=periods, freq='D')
+        
+        # Generate forecast
         forecast = model.predict(future)
-        return forecast.tail(periods)['yhat']
+        
+        # Return only the future predictions
+        return forecast.tail(periods)[['ds', 'yhat']].set_index('ds')['yhat']
+        
     except Exception as e:
         raise Exception(f"Prophet prediction failed: {str(e)}")
 
