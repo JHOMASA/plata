@@ -1183,60 +1183,39 @@ def main():
             st.header("📈 Financial Ratios Analysis")
 
             # Create tabs for different ratio types
-            tab1, tab2, tab3 = st.tabs(["Fundamental Ratios", "Market Risk Metrics"])
+            tab1, tab2  = st.tabs(["Fundamental Ratios", "Market Risk Metrics"])
     
             with tab1:
-                st.subheader("🧮 Fundamental Ratios Analysis")
+                st.subheader("Fundamental Ratios")
                 try:
-                    with st.spinner("Fetching fundamental ratios..."):
-                        # Get ratios with progress indicator
-                        ratios = get_yahoo_ratios(ticker)
+                    ratios = get_yahoo_ratios(ticker)
+            
+                    if ratios:
+                        # Get all three values properly
+                        sector, industry, peers = get_sector_peers(ticker)
                 
-                        if ratios:
-                            # Organize ratios into logical groups
-                            valuation_ratios = {
-                                'P/E Ratio': ratios.get('priceEarningsRatio'),
-                                'P/B Ratio': ratios.get('priceToBookRatio')
-                            }
-                    
-                            profitability_ratios = {
-                                'ROE': ratios.get('returnOnEquity'),
-                                'ROA': ratios.get('returnOnAssets')
-                            }
-                    
-                            financial_health_ratios = {
-                                'Debt/Equity': ratios.get('debtEquityRatio'),
-                                'Current Ratio': ratios.get('currentRatio')
-                            }
-                    
-                            # Display each group in expandable sections
-                            with st.expander("💵 Valuation Metrics", expanded=True):
-                                if any(valuation_ratios.values()):
-                                    display_ratio_group(valuation_ratios, ticker)
-                                else:
-                                    st.warning("No valuation data available")
-                    
-                            with st.expander("📈 Profitability Metrics", expanded=True):
-                                if any(profitability_ratios.values()):
-                                    display_ratio_group(profitability_ratios, ticker)
-                                else:
-                                    st.warning("No profitability data available")
-                    
-                            with st.expander("🏦 Financial Health", expanded=True):
-                                if any(financial_health_ratios.values()):
-                                    display_ratio_group(financial_health_ratios, ticker)
-                                else:
-                                    st.warning("No financial health data available")
-                    
-                            # Add quick assessment
-                            st.subheader("🔍 Quick Assessment")
-                            generate_quick_assessment(ratios)
-                    
+                        fundamental_ratios = {
+                            'priceEarningsRatio': ratios.get('priceEarningsRatio'),
+                            'priceToBookRatio': ratios.get('priceToBookRatio'),
+                            'debtEquityRatio': ratios.get('debtEquityRatio'),
+                            'currentRatio': ratios.get('currentRatio'),
+                            'returnOnEquity': ratios.get('returnOnEquity'),
+                            'returnOnAssets': ratios.get('returnOnAssets')
+                        }
+                
+                        if any(v is not None for v in fundamental_ratios.values()):
+                            display_financial_ratios(fundamental_ratios, ticker)
                         else:
-                            st.warning("Could not retrieve fundamental ratios")
-        
+                            st.warning("No fundamental ratio data available")
+            
+                    # Show sector context if available
+                    if sector and industry:
+                        st.caption(f"Sector: {sector} | Industry: {industry}")
+                    if peers:
+                        st.caption(f"Peers: {', '.join(peers[:3])}{'...' if len(peers) > 3 else ''}")
+                
                 except Exception as e:
-                    st.error(f"Fundamental analysis failed: {str(e)}")
+                    st.error(f"Fundamental ratios analysis failed: {str(e)}")
     
             with tab2:
                 st.subheader("🎯 Risk Metrics Analysis")
@@ -1341,40 +1320,7 @@ def main():
                 except Exception as e:
                     st.error(f"Risk analysis failed: {str(e)}")
 
-            with tab3:
-                st.subheader("📈 Historical Trends")
-                try:
-                    if not data.empty:
-                        # Ratio trend analysis
-                        st.markdown("### 📉 Ratio Trends (If Available)")
-                
-                        # Placeholder for actual ratio trends - would need historical ratio data
-                        st.info("""
-                        Trend analysis requires historical ratio data. 
-                        This feature would show how the company's ratios have evolved over time.
-                        """)
-                
-                        # Price and volume as fallback
-                        st.markdown("### 📊 Price & Volume Trends")
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=data.index,
-                            y=data['Close'],
-                            name='Price',
-                            line=dict(color='#1f77b4')
-                        ))
-                        fig.update_layout(
-                            title=f"{ticker} Price Trend",
-                            yaxis_title="Price ($)",
-                            hovermode="x unified",
-                            height=400
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.warning("No historical data available for trend analysis")
-        
-                except Exception as e:
-                    st.error(f"Trend analysis failed: {str(e)}")
+           
         
         elif analysis_type == "Predictions":
             st.header("🔮 Price Predictions")
