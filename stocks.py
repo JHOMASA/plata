@@ -1266,7 +1266,7 @@ def main():
                                      help="1-year standard deviation of returns"
                                 )
                                 st.progress(
-                                    min(risk_metrics.get('volatility', 0)/0.5, 
+                                    min(risk_metrics.get('volatility', 0)/0.5,1.0) 
                                 )
                                 st.caption("🛈 <0.5 = Low, >1.0 = High")
                 
