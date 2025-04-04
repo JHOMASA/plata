@@ -1296,57 +1296,57 @@ def main():
                                     text="<0 = Poor, >1 = Good"
                                 )
                 
-                # Visualizations
-                st.markdown("### 📊 Risk Over Time")
-                if not data.empty and 'Close' in data.columns:
-                    # Volatility chart
-                    c1, c2 = st.columns(2)
+                            # Visualizations
+                            st.markdown("### 📊 Risk Over Time")
+                            if not data.empty and 'Close' in data.columns:
+                                # Volatility chart
+                                c1, c2 = st.columns(2)
                     
-                    with c1:
-                        st.markdown("#### 30-Day Rolling Volatility")
-                        returns = np.log(data['Close']).diff()
-                        rolling_vol = returns.rolling(window=30).std() * np.sqrt(252)
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=rolling_vol.index,
-                            y=rolling_vol,
-                            mode='lines',
-                            line=dict(color='#FF4B4B', width=2),
-                            name='Volatility'
-                        ))
-                        fig.update_layout(
-                            yaxis_tickformat=".0%",
-                            hovermode="x",
-                            height=300,
-                            margin=dict(t=30)
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
+                                with c1:
+                                    st.markdown("#### 30-Day Rolling Volatility")
+                                    returns = np.log(data['Close']).diff()
+                                    rolling_vol = returns.rolling(window=30).std() * np.sqrt(252)
+                                    fig = go.Figure()
+                                    fig.add_trace(go.Scatter(
+                                        x=rolling_vol.index,
+                                        y=rolling_vol,
+                                        mode='lines',
+                                        line=dict(color='#FF4B4B', width=2),
+                                        name='Volatility'
+                                    ))
+                                    fig.update_layout(
+                                        yaxis_tickformat=".0%",
+                                        hovermode="x",
+                                        height=300,
+                                        margin=dict(t=30)
+                                    )
+                                    st.plotly_chart(fig, use_container_width=True)
                     
-                    with c2:
-                        st.markdown("#### Cumulative Drawdown")
-                        rolling_max = data['Close'].cummax()
-                        daily_drawdown = data['Close']/rolling_max - 1
-                        fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=daily_drawdown.index,
-                            y=daily_drawdown,
-                            fill='tozeroy',
-                            fillcolor='rgba(255, 75, 75, 0.3)',
-                            line=dict(color='#FF4B4B'),
-                            name='Drawdown'
-                        ))
-                        fig.update_layout(
-                            yaxis_tickformat=".0%",
-                            hovermode="x",
-                            height=300,
-                            margin=dict(t=30)
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.warning("Could not calculate risk metrics")
+                                with c2:
+                                    st.markdown("#### Cumulative Drawdown")
+                                    rolling_max = data['Close'].cummax()
+                                    daily_drawdown = data['Close']/rolling_max - 1
+                                    fig = go.Figure()
+                                    fig.add_trace(go.Scatter(
+                                        x=daily_drawdown.index,
+                                        y=daily_drawdown,
+                                        fill='tozeroy',
+                                        fillcolor='rgba(255, 75, 75, 0.3)',
+                                        line=dict(color='#FF4B4B'),
+                                        name='Drawdown'
+                                    ))
+                                    fig.update_layout(
+                                        yaxis_tickformat=".0%",
+                                        hovermode="x",
+                                        height=300,
+                                        margin=dict(t=30)
+                                    )
+                                    st.plotly_chart(fig, use_container_width=True)
+                        else:
+                            st.warning("Could not calculate risk metrics")
     
-    except Exception as e:
-        st.error(f"Risk analysis failed: {str(e)}")
+                except Exception as e:
+                    st.error(f"Risk analysis failed: {str(e)}")
 
             
         
