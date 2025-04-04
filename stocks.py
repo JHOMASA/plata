@@ -1188,87 +1188,147 @@ def main():
             st.header("📈 Financial Ratios Analysis")
 
             # Create tabs for different ratio types
-            tab1, tab2 = st.tabs(["Fundamental Ratios", "Market Risk Metrics"])
+            tab1, tab2, tab3 = st.tabs(["Fundamental Ratios", "Market Risk Metrics"])
     
             with tab1:
-                st.subheader("Fundamental Ratios")
+                st.subheader("🧮 Fundamental Ratios Analysis")
                 try:
-                    # Get fundamental ratios (Yahoo Finance + Alpha Vantage fallback)
-                    ratios = get_yahoo_ratios(ticker)
-            
-                    if ratios:
-                        # Filter only fundamental ratios for display
-                        fundamental_ratios = {
-                            'priceEarningsRatio': ratios.get('priceEarningsRatio'),
-                            'priceToBookRatio': ratios.get('priceToBookRatio'),
-                            'debtEquityRatio': ratios.get('debtEquityRatio'),
-                            'currentRatio': ratios.get('currentRatio'),
-                            'returnOnEquity': ratios.get('returnOnEquity'),
-                            'returnOnAssets': ratios.get('returnOnAssets')
-                        }
+                    with st.spinner("Fetching fundamental ratios..."):
+                        # Get ratios with progress indicator
+                        ratios = get_yahoo_ratios(ticker)
                 
-                        if any(v is not None for v in fundamental_ratios.values()):
-                            display_financial_ratios(fundamental_ratios, ticker)
+                        if ratios:
+                            # Organize ratios into logical groups
+                            valuation_ratios = {
+                                'P/E Ratio': ratios.get('priceEarningsRatio'),
+                                'P/B Ratio': ratios.get('priceToBookRatio')
+                            }
+                    
+                            profitability_ratios = {
+                                'ROE': ratios.get('returnOnEquity'),
+                                'ROA': ratios.get('returnOnAssets')
+                            }
+                    
+                            financial_health_ratios = {
+                                'Debt/Equity': ratios.get('debtEquityRatio'),
+                                'Current Ratio': ratios.get('currentRatio')
+                            }
+                    
+                            # Display each group in expandable sections
+                            with st.expander("💵 Valuation Metrics", expanded=True):
+                                if any(valuation_ratios.values()):
+                                    display_ratio_group(valuation_ratios, ticker)
+                                else:
+                                    st.warning("No valuation data available")
+                    
+                            with st.expander("📈 Profitability Metrics", expanded=True):
+                                if any(profitability_ratios.values()):
+                                    display_ratio_group(profitability_ratios, ticker)
+                                else:
+                                    st.warning("No profitability data available")
+                    
+                            with st.expander("🏦 Financial Health", expanded=True):
+                                if any(financial_health_ratios.values()):
+                                    display_ratio_group(financial_health_ratios, ticker)
+                                else:
+                                    st.warning("No financial health data available")
+                    
+                            # Add quick assessment
+                            st.subheader("🔍 Quick Assessment")
+                            generate_quick_assessment(ratios)
+                    
                         else:
-                            st.warning("No fundamental ratio data available")
-                    else:
-                        st.warning("Could not retrieve fundamental ratios")
-                
+                            st.warning("Could not retrieve fundamental ratios")
+        
                 except Exception as e:
-                    st.error(f"Fundamental ratios analysis failed: {str(e)}")
+                    st.error(f"Fundamental analysis failed: {str(e)}")
     
             with tab2:
-                st.subheader("Market Risk Metrics")
+                st.subheader("🎯 Risk Metrics Analysis")
                 try:
-                    # Calculate market risk metrics from price data
-                    risk_metrics = calculate_risk_metrics(data)
-            
+                    with st.spinner("Calculating risk metrics..."):
+                        risk_metrics = calculate_risk_metrics(data)
+                
                     if risk_metrics:
-                        # Display risk metrics in columns
-                        col1, col2, col3 = st.columns(3)
-                
-                        with col1:
-                            if risk_metrics.get('volatility') is not None:
-                                st.metric("Annualized Volatility", 
-                                     f"{risk_metrics['volatility']:.2%}",
-                                     help="Standard deviation of daily returns, annualized")
-                
-                        with col2:
-                            if risk_metrics.get('maximumDrawdown') is not None:
-                                st.metric("Maximum Drawdown", 
-                                     f"{risk_metrics['maximumDrawdown']:.2%}",
-                                     help="Largest peak-to-trough decline")
-                
-                        with col3:
-                            if risk_metrics.get('sharpeRatio') is not None:
-                                st.metric("Sharpe Ratio", 
-                                     f"{risk_metrics['sharpeRatio']:.2f}",
-                                     help="Risk-adjusted return (assuming 0 risk-free rate)")
-                
-                        # Add visualization for volatility over time
-                        if not data.empty and 'Close' in data.columns:
-                            st.subheader("Historical Volatility (30-day rolling)")
-                            returns = np.log(data['Close']).diff()
-                            rolling_vol = returns.rolling(window=30).std() * np.sqrt(252)
+                        # Create a metrics dashboard
+                        st.markdown("### 📉 Risk Profile Summary")
                     
-                            fig = go.Figure()
-                            fig.add_trace(go.Scatter(
-                                x=rolling_vol.index,
-                                y=rolling_vol,
-                                mode='lines',
-                                name='30-day Volatility'
-                            ))
-                            fig.update_layout(
-                                yaxis_tickformat=".0%",
-                                hovermode="x",
-                                height=300
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
+                        # Main metrics in columns
+                        m1, m2, m3 = st.columns(3)
+                        with m1:
+                            st.metric("Annual Volatility", 
+                                 f"{risk_metrics.get('volatility', 0):.2%}",
+                                 help="1-year standard deviation of returns")
+                            st.progress(min(risk_metrics.get('volatility', 0)/0.5, 
+                                   text="<0.5% = Low, >1% = High")
+                    
+                        with m2:
+                            st.metric("Max Drawdown", 
+                                 f"{risk_metrics.get('maximumDrawdown', 0):.2%}",
+                                 help="Worst historical peak-to-trough decline")
+                            st.progress(abs(risk_metrics.get('maximumDrawdown', 0)/0.5,
+                                   text="<10% = Low, >30% = High")
+                    
+                        with m3:
+                            sharpe = risk_metrics.get('sharpeRatio', 0)
+                            st.metric("Sharpe Ratio", 
+                                 f"{sharpe:.2f}",
+                                 delta="Good" if sharpe > 1 else "Fair" if sharpe > 0 else "Poor",
+                                 help="Risk-adjusted returns (0 risk-free rate)")
+                            st.progress((sharpe+1)/3, 
+                                   text="<0 = Poor, >1 = Good")
+                    
+                        # Visualizations
+                        st.markdown("### 📊 Risk Over Time")
+                        if not data.empty and 'Close' in data.columns:
+                            # Volatility chart
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                st.markdown("#### 30-Day Rolling Volatility")
+                                returns = np.log(data['Close']).diff()
+                                rolling_vol = returns.rolling(window=30).std() * np.sqrt(252)
+                                fig = go.Figure()
+                                fig.add_trace(go.Scatter(
+                                    x=rolling_vol.index,
+                                    y=rolling_vol,
+                                    mode='lines',
+                                    line=dict(color='#FF4B4B', width=2),
+                                    name='Volatility'
+                                ))
+                                fig.update_layout(
+                                    yaxis_tickformat=".0%",
+                                    hovermode="x",
+                                    height=300,
+                                    margin=dict(t=30)
+                                )
+                                st.plotly_chart(fig, use_container_width=True)
+                        
+                            # Drawdown chart
+                            with c2:
+                                st.markdown("#### Cumulative Drawdown")
+                                rolling_max = data['Close'].cummax()
+                                daily_drawdown = data['Close']/rolling_max - 1
+                                fig = go.Figure()
+                                fig.add_trace(go.Scatter(
+                                    x=daily_drawdown.index,
+                                    y=daily_drawdown,
+                                    fill='tozeroy',
+                                    fillcolor='rgba(255, 75, 75, 0.3)',
+                                    line=dict(color='#FF4B4B'),
+                                    name='Drawdown'
+                                ))
+                                fig.update_layout(
+                                    yaxis_tickformat=".0%",
+                                    hovermode="x",
+                                    height=300,
+                                    margin=dict(t=30)
+                                )
+                                st.plotly_chart(fig, use_container_width=True)
                     else:
                         st.warning("Could not calculate risk metrics")
-                
-                except Exception as e:
-                    st.error(f"Risk metrics analysis failed: {str(e)}")
+        
+                 except Exception as e:
+                    st.error(f"Risk analysis failed: {str(e)}")
             
 
             
