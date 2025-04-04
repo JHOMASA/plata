@@ -1263,14 +1263,18 @@ def main():
                                          help="1-year standard deviation of returns")
                                 st.progress(min(risk_metrics.get('volatility', 0)/0.5, 
                                            text="<0.5% = Low, >1% = High")
-                
+
+
+                                            
                             with m2:
                                  st.metric("Max Drawdown", 
                                          f"{risk_metrics.get('maximumDrawdown', 0):.2%}",
                                          help="Worst historical peak-to-trough decline")
                                  st.progress(abs(risk_metrics.get('maximumDrawdown', 0)/0.5,
                                             text="<10% = Low, >30% = High")
-                
+                            
+                            
+                                             
                             with m3:
                                  sharpe = risk_metrics.get('sharpeRatio', 0)
                                  st.metric("Sharpe Ratio", 
