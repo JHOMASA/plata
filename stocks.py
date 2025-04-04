@@ -377,59 +377,170 @@ def get_alpha_vantage_ratios(ticker: str) -> Dict[str, Optional[float]]:
     return ratios
 
 def show_metric_analysis(display_data: Dict[str, float], sector_avgs: Dict[str, float]):
-    """Displays detailed ratio analysis with sector comparison"""
-    st.subheader("Detailed Ratio Analysis")
+    """Displays detailed ratio analysis with correct percentage handling and enhanced visuals"""
+    st.subheader("📊 Detailed Ratio Analysis")
     
-    for ratio, value in display_data.items():
-        with st.expander(f"{ratio}: {value:.2f}{'%' if ratio in ['ROE', 'ROA'] else ''}"):
-            cols = st.columns(3)
+    # Define ratio categories for proper assessment
+    profitability_ratios = ['ROE', 'ROA']
+    valuation_ratios = ['P/E Ratio', 'P/B Ratio']
+    liquidity_ratios = ['Current Ratio']
+    leverage_ratios = ['Debt/Equity']
+    
+    for ratio, displayed_value in display_data.items():
+        # Determine if we should handle as percentage
+        is_percentage = ratio in profitability_ratios
+        
+        # Convert displayed values back to decimal for calculations
+        actual_value = displayed_value / 100 if is_percentage else displayed_value
+        
+        with st.expander(f"{ratio}", expanded=False):
+            cols = st.columns([1, 1, 0.8, 1.2])  # Adjusted column ratios
             
             sector_avg = sector_avgs.get(ratio)
+            
+            with cols[0]:
+                # Company value display
+                st.metric(
+                    label="Your Company",
+                    value=f"{displayed_value:,.2f}{'%' if is_percentage else ''}",
+                    help="Raw value from company financials"
+                )
+            
             if sector_avg is not None:
-                diff = (value - sector_avg) / sector_avg * 100
+                # Convert sector average if needed
+                sector_avg_actual = sector_avg / 100 if is_percentage else sector_avg
                 
-                with cols[0]:
-                    st.metric("Company Value", 
-                            f"{value:.2f}{'%' if ratio in ['ROE', 'ROA'] else ''}")
+                # Calculate meaningful difference
+                if sector_avg_actual != 0:  # Prevent division by zero
+                    diff = (actual_value - sector_avg_actual) / sector_avg_actual * 100
+                else:
+                    diff = 0
                 
                 with cols[1]:
-                    st.metric("Sector Average", 
-                            f"{sector_avg:.2f}{'%' if ratio in ['ROE', 'ROA'] else ''}",
-                            delta=f"{diff:.1f}%")
+                    # Sector average display
+                    st.metric(
+                        label="Sector Benchmark",
+                        value=f"{sector_avg:,.2f}{'%' if is_percentage else ''}",
+                        delta=f"{diff:+.1f}%" if sector_avg_actual != 0 else "N/A",
+                        help="Industry average for comparison"
+                    )
                 
                 with cols[2]:
-                    status = "✅" if (
-                        (ratio in ['ROE', 'ROA', 'Current Ratio'] and diff > 0) or
-                        (ratio in ['P/E Ratio', 'P/B Ratio', 'Debt/Equity'] and diff < 0)
-                    ) else "⚠️" if abs(diff) > 20 else "➖"
-                    st.metric("Assessment", status)
+                    # Dynamic assessment indicator
+                    if ratio in profitability_ratios + liquidity_ratios:
+                        status = "✅" if diff > 0 else "⚠️" if diff < -10 else "➖"
+                        assessment = "Better" if diff > 0 else "Worse" if diff < -10 else "Neutral"
+                    elif ratio in valuation_ratios + leverage_ratios:
+                        status = "✅" if diff < 0 else "⚠️" if diff > 10 else "➖"
+                        assessment = "Better" if diff < 0 else "Worse" if diff > 10 else "Neutral"
+                    else:
+                        status = "➖"
+                        assessment = "Neutral"
+                    
+                    st.metric(
+                        label="Assessment",
+                        value=f"{status} {assessment}",
+                        help="Compared to sector average"
+                    )
                 
-                st.info(generate_ratio_insight(ratio, value, sector_avg))
+                with cols[3]:
+                    # Enhanced ratio-specific insights
+                    insight = generate_enhanced_insight(
+                        ratio, 
+                        actual_value, 
+                        sector_avg_actual,
+                        diff
+                    )
+                    st.info(insight)
+                
+                # Add visual gauge
+                show_ratio_gauge(actual_value, sector_avg_actual, ratio)
             else:
-                st.metric("Company Value", 
-                        f"{value:.2f}{'%' if ratio in ['ROE', 'ROA'] else ''}")
-                st.warning("No sector average available for comparison")
+                with cols[1]:
+                    st.warning("No sector benchmark available")
+                with cols[3]:
+                    st.info(generate_standalone_insight(ratio, actual_value))
 
-def generate_ratio_insight(ratio: str, value: float, sector_avg: float) -> str:
-    """Generates contextual insights for each ratio"""
-    diff_pct = (value - sector_avg) / sector_avg * 100
+def generate_enhanced_insight(ratio: str, value: float, sector_avg: float, diff: float) -> str:
+    """Generates more nuanced insights considering ratio magnitude"""
+    if ratio == 'ROE':
+        if value > 0.20:  # 20%
+            base = "Excellent profitability"
+        elif value > 0.15:
+            base = "Strong profitability"
+        elif value > 0.10:
+            base = "Average profitability"
+        else:
+            base = "Weak profitability"
+        
+        if abs(diff) > 20:
+            comp = "significantly {} than sector".format("higher" if diff > 0 else "lower")
+        elif abs(diff) > 10:
+            comp = "moderately {} than sector".format("higher" if diff > 0 else "lower")
+        else:
+            comp = "in line with sector"
+        
+        return f"{base} ({comp}). Target range: 15-20%"
     
-    if ratio == 'P/E Ratio':
-        if diff_pct > 30:
-            return "Significantly higher than sector average - may indicate overvaluation"
-        elif diff_pct < -20:
-            return "Significantly lower than sector average - may indicate undervaluation"
-        return "Valuation in line with sector peers"
+    elif ratio == 'P/E Ratio':
+        if value < 10:
+            base = "Very low valuation"
+        elif value < 15:
+            base = "Low valuation"
+        elif value < 25:
+            base = "Reasonable valuation"
+        else:
+            base = "High valuation"
+        
+        return f"{base}. Sector average: {sector_avg:.1f}. Diff: {diff:+.1f}%"
     
-    elif ratio == 'ROE':
-        if diff_pct > 20:
-            return "Strong profitability - generating more income per equity than peers"
-        elif diff_pct < -20:
-            return "Below average profitability - less efficient with shareholder equity"
-        return "Profitability comparable to sector average"
+    # Add similar enhanced insights for other ratios...
+    return "Financial metric analysis"
+
+def show_ratio_gauge(value: float, benchmark: float, ratio_name: str):
+    """Visual gauge showing performance relative to benchmark"""
+    if benchmark == 0:
+        return
     
-    # Add more ratio-specific insights...
-    return ""
+    max_val = max(value, benchmark) * 1.5
+    fig = go.Figure(go.Indicator(
+        mode = "gauge+number+delta",
+        value = value,
+        domain = {'x': [0, 1], 'y': [0, 1]},
+        title = {'text': f"{ratio_name} Performance"},
+        delta = {'reference': benchmark},
+        gauge = {
+            'axis': {'range': [0, max_val]},
+            'bar': {'color': "#1f77b4"},
+            'steps': [
+                {'range': [0, benchmark*0.7], 'color': "lightgray"},
+                {'range': [benchmark*0.7, benchmark*1.3], 'color': "gray"},
+                {'range': [benchmark*1.3, max_val], 'color': "darkgray"}
+            ],
+            'threshold': {
+                'line': {'color': "red", 'width': 4},
+                'thickness': 0.75,
+                'value': benchmark
+            }
+        }
+    ))
+    st.plotly_chart(fig, use_container_width=True, use_container_height=True)
+def generate_standalone_insight(ratio: str, value: float) -> str:
+    """Insights when no sector benchmark is available"""
+    if ratio == 'ROE':
+        if value > 0.20: return "Excellent profitability (>20%)"
+        if value > 0.15: return "Strong profitability (15-20%)"
+        if value > 0.10: return "Average profitability (10-15%)"
+        return "Below average profitability (<10%)"
+    
+    elif ratio == 'P/E Ratio':
+        if value < 10: return "Very low valuation (P/E <10)"
+        if value < 15: return "Low valuation (P/E 10-15)"
+        if value < 25: return "Reasonable valuation (P/E 15-25)"
+        return "High valuation (P/E >25)"
+    
+    # Add other ratio insights...
+    return "Financial metric analysis"
 
 def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
     """Calculate market risk metrics from price data."""
