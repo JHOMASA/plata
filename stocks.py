@@ -1267,8 +1267,8 @@ def main():
                                 )
                                 st.progress(
                                     min(risk_metrics.get('volatility', 0)/0.5, 
-                                    text="<0.5% = Low, >1% = High"
                                 )
+                                st.caption("🛈 <0.5 = Low, >1.0 = High")
                 
                             # Column 2: Maximum Drawdown
                             with m2:
@@ -1278,9 +1278,9 @@ def main():
                                     help="Worst historical peak-to-trough decline"
                                 )
                                 st.progress(
-                                    abs(risk_metrics.get('maximumDrawdown', 0)/0.5,
-                                    text="<10% = Low, >30% = High"
+                                    min(abs(risk_metrics.get('maximumDrawdown', 0))/0.5,1.0)                                    
                                 )
+                                st.caption("🛈 <10% = Low, >30% = High")
                 
                             # Column 3: Sharpe Ratio
                             with m3:
