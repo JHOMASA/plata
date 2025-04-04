@@ -1011,7 +1011,7 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
             if api_key in sector_avg:
                 sector_x.append(display_name)
                 if display_name in ['ROE', 'ROA']:
-                    sector_y.append(sector_avg[api_key] * 100)
+                    sector_y.append(sector_avg[api_key] * 1)
                 else:
                     sector_y.append(sector_avg[api_key])
         
