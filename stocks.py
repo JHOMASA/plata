@@ -359,7 +359,7 @@ def create_dynamic_chart(display_data: Dict[str, float], ticker: str,
         yaxis_title="Value",
         hovermode="x unified",
         height=max(400, len(display_data) * 60)  # Dynamic height
-    
+    )
     st.plotly_chart(fig, use_container_width=True)
 def get_alpha_vantage_ratios(ticker: str) -> Dict[str, Optional[float]]:
     """Ensures proper decimal conversion from API"""
