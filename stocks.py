@@ -246,7 +246,7 @@ def get_yahoo_ratios(ticker: str, fmp_api_key: str = None) -> Dict[str, Any]:  #
         yf_ticker = yf.Ticker(ticker)
         info = yf_ticker.info
         
-        if not info:
+        if not info:    
             st.error("No financial data available for this ticker")
             return None
             
@@ -313,7 +313,7 @@ def prepare_display_data(ratios: Dict[str, Any]) -> Dict[str, float]:
         if api_key in ratios and ratios[api_key] is not None:
             try:
                 value = float(ratios[api_key])
-                display_data[display_name] = value 
+                display_data[display_name] = value *(100 if display_name in ["ROE", "ROA"] else 1) 
             except(TypeError, ValueError):
                 continue
     return display_data
