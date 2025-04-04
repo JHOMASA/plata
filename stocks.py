@@ -1341,7 +1341,40 @@ def main():
                 except Exception as e:
                     st.error(f"Risk analysis failed: {str(e)}")
 
-            
+            with tab3:
+                st.subheader("📈 Historical Trends")
+                try:
+                    if not data.empty:
+                        # Ratio trend analysis
+                        st.markdown("### 📉 Ratio Trends (If Available)")
+                
+                        # Placeholder for actual ratio trends - would need historical ratio data
+                        st.info("""
+                        Trend analysis requires historical ratio data. 
+                        This feature would show how the company's ratios have evolved over time.
+                        """)
+                
+                        # Price and volume as fallback
+                        st.markdown("### 📊 Price & Volume Trends")
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=data.index,
+                            y=data['Close'],
+                            name='Price',
+                            line=dict(color='#1f77b4')
+                        ))
+                        fig.update_layout(
+                            title=f"{ticker} Price Trend",
+                            yaxis_title="Price ($)",
+                            hovermode="x unified",
+                            height=400
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("No historical data available for trend analysis")
+        
+                except Exception as e:
+                    st.error(f"Trend analysis failed: {str(e)}")
         
         elif analysis_type == "Predictions":
             st.header("🔮 Price Predictions")
