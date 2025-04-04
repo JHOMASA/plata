@@ -24,7 +24,7 @@ import random
 from sklearn.metrics import mean_absolute_error
 from functools import lru_cache
 import requests
-from typing import  Dict, Any,Tuple
+from typing import  Dict, Any,Tuple, Optional,List
 from sklearn.preprocessing import MinMaxScaler
 import uuid
 
@@ -89,36 +89,29 @@ def get_stock_data(symbol: str, period: str = "1y") -> Tuple[pd.DataFrame, str]:
     return pd.DataFrame(), result
 
 def get_alpha_vantage_ratios(ticker: str) -> Dict[str, Optional[float]]:
-    """Enhanced Alpha Vantage ratio fetcher with better error handling"""
+    """Get ROE and ROA from Alpha Vantage API with proper typing"""
     ratios = {"ROE": None, "ROA": None}
-    
-    if not ALPHA_VANTAGE_API_KEY:
-        st.warning("Alpha Vantage API key not configured")
-        return ratios
-
     try:
-        response = requests.get(
-            "https://www.alphavantage.co/query",
-            params={
-                "function": "OVERVIEW",
-                "symbol": ticker,
-                "apikey": ALPHA_VANTAGE_API_KEY
-            },
-            timeout=15
-        )
-        response.raise_for_status()
+        url = f"https://www.alphavantage.co/query?function=OVERVIEW&symbol={ticker}&apikey={ALPHA_VANTAGE_API_KEY}"
+        response = requests.get(url, timeout=10)
         data = response.json()
-
-        # Safely extract and convert ratios
-        ratios.update({
-            "ROE": safe_float(data.get("ReturnOnEquityTTM"), div_by=100),
-            "ROA": safe_float(data.get("ReturnOnAssetsTTM"), div_by=100)
-        })
-
+        
+        if "ReturnOnEquityTTM" in data:
+            try:
+                ratios["ROE"] = float(data["ReturnOnEquityTTM"]) / 100  # Convert percentage to decimal
+            except (ValueError, TypeError):
+                pass
+                
+        if "ReturnOnAssetsTTM" in data:
+            try:
+                ratios["ROA"] = float(data["ReturnOnAssetsTTM"]) / 100  # Convert percentage to decimal
+            except (ValueError, TypeError):
+                pass
+                
     except requests.exceptions.RequestException as e:
         st.error(f"Alpha Vantage API request failed: {str(e)}")
     except Exception as e:
-        st.error(f"Alpha Vantage data processing error: {str(e)}")
+        st.error(f"Error processing Alpha Vantage data: {str(e)}")
     
     return ratios
 
