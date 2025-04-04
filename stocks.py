@@ -298,8 +298,10 @@ def display_financial_ratios(ratios: Dict[str, Any], ticker: str):
             return
 
         # Create visualization with sector comparison
-        create_dynamic_chart(d
-        
+        create_dynamic_chart(display_data, ticker, sector, sector_avgs)
+        show_metric_analysis(display_data, sector_avgs)
+    except Exception as e:
+        st.error(f"Error displaying ratios: {str(e)}")
 
 
 def prepare_display_data(ratios: Dict[str, Any]) -> Dict[str, float]:
