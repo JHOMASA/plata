@@ -564,13 +564,6 @@ def calculate_risk_metrics(data: pd.DataFrame) -> Dict[str, Any]:
         return {}
 
 def monte_carlo_simulation(data: pd.DataFrame, n_simulations: int = 1000, days: int = 180) -> dict:
-    """
-    Enhanced Monte Carlo simulation with moving average smoothing options
-    Returns dictionary containing:
-    - raw_simulations: Original simulation paths
-    - ma_simulations: Moving average smoothed paths
-    - wma_simulations: Weighted moving average smoothed paths
-    """
     try:
         # Calculate daily returns
         returns = np.log(1 + data['Close'].pct_change())
@@ -589,20 +582,22 @@ def monte_carlo_simulation(data: pd.DataFrame, n_simulations: int = 1000, days: 
         # Apply smoothing techniques
         window_size = min(20, days//10)  # Adaptive window size
         
-        # Simple Moving Average
+        # Simple Moving Average (fill NaN after smoothing)
         ma_simulations = np.zeros_like(raw_simulations)
         for i in range(n_simulations):
             ma_simulations[:, i] = pd.Series(raw_simulations[:, i]).rolling(window=window_size).mean().values
+        ma_simulations = pd.DataFrame(ma_simulations).fillna(method='ffill').values  # Fill NaN AFTER smoothing
         
-        # Weighted Moving Average (linear weights)
+        # Weighted Moving Average (fill NaN after smoothing)
         wma_simulations = np.zeros_like(raw_simulations)
-        weights = np.arange(1, window_size+1)  # Linear weights [1, 2, 3, ...]
-        weights = weights / weights.sum()      # Normalized
+        weights = np.arange(1, window_size+1)
+        weights = weights / weights.sum()
         
         for i in range(n_simulations):
             series = pd.Series(raw_simulations[:, i])
             wma_simulations[:, i] = series.rolling(window=window_size)\
                                          .apply(lambda x: np.sum(weights * x))
+        wma_simulations = pd.DataFrame(wma_simulations).fillna(method='ffill').values  # Fill NaN AFTER smoothing
         
         return {
             'raw': raw_simulations,
