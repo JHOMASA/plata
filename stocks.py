@@ -766,7 +766,7 @@ def train_arima_model(data: pd.DataFrame) -> object:
         from statsmodels.tsa.arima.model import ARIMA
         model = ARIMA(data['Close'], order=(5,1,0))
         model_fit = model.fit()
-        return model_fit
+        return model_fit 
     except Exception as e:
         raise Exception(f"ARIMA training failed: {str(e)}")
 
